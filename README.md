@@ -1,3 +1,7 @@
+# Vekrel-Shared
+
+What this repo is: the shared TypeScript packages (contracts, client runtime, provider adapters, source-control adapters) and build tooling used by every Vekrel app repo. Not runnable on its own.
+
 Shared packages and build tooling for Vekrel. Derived from T3 Code (MIT, see NOTICE). App repos pull `packages/` with `git subtree pull --prefix=packages <this repo> main --squash`.
 
 ## Deviations from upstream T3 Code 8d3b061
