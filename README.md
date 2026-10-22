@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/brand/logo-horizontal-on-dark.png">
+    <img src=".github/brand/logo-horizontal-on-light.png" alt="Vekrel" width="360">
+  </picture>
+</p>
+
 # Vekrel-Shared
 
 What this repo is: the shared TypeScript packages (contracts, client runtime, provider adapters, source-control adapters) and build tooling used by every Vekrel app repo. Not runnable on its own.
