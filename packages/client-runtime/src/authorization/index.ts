@@ -1,6 +1,6 @@
 export * from "./remote.ts";
 export {
-  type AuthorizedRemoteEnvironment,
+  type AuthorizedRemoteMachine,
   type AuthorizedRemoteHttpEnvironment,
 } from "./service.ts";
 export * as TokenStore from "./tokenStore.ts";

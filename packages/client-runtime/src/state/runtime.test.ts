@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
-  EnvironmentId,
+  MachineId,
   type PreviewEvent,
   type TerminalAttachInput,
   type TerminalAttachStreamEvent,
@@ -47,8 +47,8 @@ import {
 } from "./runtime.ts";
 
 const QUERY_ENVIRONMENT = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("query-environment"),
-  label: "Query environment",
+  machineId: MachineId.make("query-machine"),
+  label: "Query machine",
   httpBaseUrl: "https://query.example.test",
   wsBaseUrl: "wss://query.example.test",
 });
@@ -135,7 +135,7 @@ const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness"
     Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
   );
   const family = createEnvironmentQueryAtomFamily(runtime, {
-    label: "test.environment-query",
+    label: "test.machine-query",
     staleTimeMs: 60_000,
     ...(persistence === undefined ? {} : { persistence }),
     execute: () => execute,
@@ -146,7 +146,7 @@ const makeEnvironmentQueryHarness = Effect.fn("TestEnvironmentQuery.makeHarness"
 
   return {
     runtime,
-    atom: family({ environmentId: QUERY_ENVIRONMENT.environmentId, input: undefined }),
+    atom: family({ machineId: QUERY_ENVIRONMENT.machineId, input: undefined }),
     supervisorSession,
     supervisorState,
     streamGeneration,
@@ -223,7 +223,7 @@ describe("preview event subscriptions", () => {
           } as unknown as RpcSession.RpcSession,
         });
         const atom = createPreviewEnvironmentAtoms(harness.runtime).events({
-          environmentId: QUERY_ENVIRONMENT.environmentId,
+          machineId: QUERY_ENVIRONMENT.machineId,
           input: {},
         });
         const registry = AtomRegistry.make();
@@ -255,7 +255,7 @@ describe("preview event subscriptions", () => {
   );
 });
 
-describe("finite environment subscription lifecycle", () => {
+describe("finite machine subscription lifecycle", () => {
   it.effect(
     "exposes early values and settles on the terminal value without waiting for a reconnect",
     () =>
@@ -272,7 +272,7 @@ describe("finite environment subscription lifecycle", () => {
             ),
           ).pipe(Stream.ensuring(Deferred.succeed(closed, undefined)));
           const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
-            followStream: (_environmentId: EnvironmentId, source: typeof stream) =>
+            followStream: (_environmentId: MachineId, source: typeof stream) =>
               Stream.concat(source, Stream.never),
           } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]);
           const runtime = Atom.runtime(
@@ -284,7 +284,7 @@ describe("finite environment subscription lifecycle", () => {
             completeWhen: (value) => value.complete,
             idleTtlMs: 0,
           });
-          const atom = family({ environmentId: QUERY_ENVIRONMENT.environmentId, input: undefined });
+          const atom = family({ machineId: QUERY_ENVIRONMENT.machineId, input: undefined });
           const registry = AtomRegistry.make();
           const observed: Array<
             AsyncResult.AsyncResult<{ complete: boolean; count: number }, unknown>
@@ -323,7 +323,7 @@ describe("finite environment subscription lifecycle", () => {
   );
 });
 
-describe("environment query lifecycle", () => {
+describe("machine query lifecycle", () => {
   it.effect(
     "terminal metadata waits for snapshots and retains known sessions across restarts",
     () =>
@@ -357,7 +357,7 @@ describe("environment query lifecycle", () => {
         yield* SubscriptionRef.set(harness.supervisorSession, Option.some(session));
         const atoms = createTerminalEnvironmentAtoms(harness.runtime);
         const atom = atoms.metadata({
-          environmentId: QUERY_ENVIRONMENT.environmentId,
+          machineId: QUERY_ENVIRONMENT.machineId,
           input: null,
         });
         const registry = AtomRegistry.make();
@@ -424,7 +424,7 @@ describe("environment query lifecycle", () => {
       };
       const atoms = createTerminalEnvironmentAtoms(harness.runtime);
       const registry = AtomRegistry.make();
-      const atom = atoms.attach({ environmentId: QUERY_ENVIRONMENT.environmentId, input });
+      const atom = atoms.attach({ machineId: QUERY_ENVIRONMENT.machineId, input });
       const unmount = registry.subscribe(
         atom,
         (result) => {
@@ -480,8 +480,8 @@ describe("environment query lifecycle", () => {
           const failFirst = Latch.makeUnsafe();
           const firstSettled = Latch.makeUnsafe();
           const unavailable = new EnvironmentRpcUnavailableError({
-            environmentId: QUERY_ENVIRONMENT.environmentId,
-            message: "Query environment is not connected.",
+            machineId: QUERY_ENVIRONMENT.machineId,
+            message: "Query machine is not connected.",
           });
           let executions = 0;
           const execute = Effect.suspend(() => {
@@ -575,8 +575,8 @@ describe("environment query lifecycle", () => {
             Effect.andThen(
               Effect.fail(
                 new EnvironmentRpcUnavailableError({
-                  environmentId: QUERY_ENVIRONMENT.environmentId,
-                  message: "Query environment is not connected.",
+                  machineId: QUERY_ENVIRONMENT.machineId,
+                  message: "Query machine is not connected.",
                 }),
               ),
             ),
@@ -633,8 +633,8 @@ describe("environment query lifecycle", () => {
     Effect.scoped(
       Effect.gen(function* () {
         const unavailable = new EnvironmentRpcUnavailableError({
-          environmentId: QUERY_ENVIRONMENT.environmentId,
-          message: "The environment did not respond to the request.",
+          machineId: QUERY_ENVIRONMENT.machineId,
+          message: "The machine did not respond to the request.",
         });
         const harness = yield* makeEnvironmentQueryHarness(Effect.fail(unavailable));
         const registry = yield* mountEnvironmentQuery(harness.atom);
@@ -660,7 +660,7 @@ describe("environment query lifecycle", () => {
       expectedFailure: null,
     },
     {
-      condition: "while the environment is offline",
+      condition: "while the machine is offline",
       state: queryConnectionState({
         network: "offline",
         phase: "offline",
@@ -1117,7 +1117,7 @@ describe("runtime command runner", () => {
   });
 });
 
-describe("persisted environment queries", () => {
+describe("persisted machine queries", () => {
   it.effect(
     "restores cached data in a new registry while offline, then refreshes on reconnect",
     () =>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
-  EnvironmentId,
+  MachineId,
   ORCHESTRATION_PROTOCOL_HEADER,
   ORCHESTRATION_PROTOCOL_VERSION_TEXT,
   ProjectId,
@@ -18,7 +18,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { HttpClient } from "effect/http";
 
-import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
+import * as RemoteMachineAuthorization from "../authorization/service.ts";
 import {
   ConnectionTransientError,
   RelayConnectionTarget,
@@ -26,7 +26,7 @@ import {
   type PreparedHttpAuthorization,
 } from "../connection/model.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
-import { type RemoteEnvironmentRequestError } from "../rpc/http.ts";
+import { type RemoteMachineRequestError } from "../rpc/http.ts";
 import * as RpcHttp from "../rpc/http.ts";
 import * as PullRequestDiffLoader from "./pullRequestDiffHttp.ts";
 import { fetchEnvironmentSessionState } from "./session.ts";
@@ -43,11 +43,11 @@ const encodeBoundedSnapshot = Schema.encodeSync(OrchestrationV2ThreadBoundedSnap
 const encodeThreadTranscript = Schema.encodeSync(OrchestrationV2ThreadTranscript);
 
 const TARGET = new RelayConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Remote environment",
+  machineId: MachineId.make("machine-1"),
+  label: "Remote machine",
 });
 const PREPARED: PreparedConnection = {
-  environmentId: TARGET.environmentId,
+  machineId: TARGET.machineId,
   label: TARGET.label,
   httpBaseUrl: "https://previous.example.test",
   socketUrl: "wss://previous.example.test/ws",
@@ -108,7 +108,7 @@ const THREAD_HISTORY = {
 function credentialRejectedResponse(reason = "invalid_credential") {
   return Response.json(
     {
-      _tag: "EnvironmentAuthInvalidError",
+      _tag: "MachineAuthInvalidError",
       code: "auth_invalid",
       reason,
       traceId: "trace-rejected",
@@ -121,11 +121,11 @@ function makeHarness(reply: (requestNumber: number) => Response | Promise<Respon
   const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
   const authorizations: Array<
     Parameters<
-      RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization["Service"]["authorizeDpopHttp"]
+      RemoteMachineAuthorization.RemoteMachineAuthorization["Service"]["authorizeDpopHttp"]
     >[0]
   > = [];
   const proofs: Array<ManagedRelay.ManagedRelayDpopProofInput> = [];
-  const remoteAuthorization = RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization.of({
+  const remoteAuthorization = RemoteMachineAuthorization.RemoteMachineAuthorization.of({
     authorizeBearer: () => Effect.die("Unexpected bearer connection preparation."),
     authorizeDpop: () => Effect.die("HTTP requests must not prepare a WebSocket connection."),
     authorizeDpopHttp: (input) =>
@@ -133,7 +133,7 @@ function makeHarness(reply: (requestNumber: number) => Response | Promise<Respon
         authorizations.push(input);
         const rejected = input.rejectedAccessToken !== undefined;
         return {
-          environmentId: TARGET.environmentId,
+          machineId: TARGET.machineId,
           label: TARGET.label,
           httpBaseUrl: rejected ? RENEWED_ORIGIN : CURRENT_ORIGIN,
           httpAuthorization: {
@@ -181,7 +181,7 @@ const LOADERS: ReadonlyArray<{
     input: HttpInput,
   ) => Effect.Effect<
     unknown,
-    RemoteEnvironmentRequestError | PullRequestDiffLoader.PullRequestDiffCredentialRejectedError,
+    RemoteMachineRequestError | PullRequestDiffLoader.PullRequestDiffCredentialRejectedError,
     HttpClient.HttpClient
   >;
 }> = [
@@ -258,14 +258,14 @@ const LOADERS: ReadonlyArray<{
   },
 ];
 
-describe("authenticated environment HTTP requests", () => {
+describe("authenticated machine HTTP requests", () => {
   it.effect.each(LOADERS)("rejects an invalid $name response", (loader) =>
     Effect.gen(function* () {
       const harness = makeHarness(() => Response.json({}));
       const result = yield* loader
         .load(harness.input)
         .pipe(Effect.provide(harness.httpLayer), Effect.asVoid, Effect.flip);
-      expect(result._tag).toBe("RemoteEnvironmentAuthInvalidJsonError");
+      expect(result._tag).toBe("RemoteMachineAuthInvalidJsonError");
       expect(harness.calls).toHaveLength(1);
     }),
   );
@@ -278,7 +278,7 @@ describe("authenticated environment HTTP requests", () => {
         Effect.flip,
       );
       expect(error).toMatchObject({
-        _tag: "RemoteEnvironmentAuthUndeclaredStatusError",
+        _tag: "RemoteMachineAuthUndeclaredStatusError",
         status: 502,
       });
     }),
@@ -304,7 +304,7 @@ describe("authenticated environment HTTP requests", () => {
           ORCHESTRATION_PROTOCOL_VERSION_TEXT,
         );
       }
-      expect(harness.authorizations).toEqual([{ expectedEnvironmentId: TARGET.environmentId }]);
+      expect(harness.authorizations).toEqual([{ expectedMachineId: TARGET.machineId }]);
       // The proof signs exactly the URL sent; signers drop the query for `htu`.
       expect(harness.proofs).toEqual([
         { method: loader.method, url: call.url, accessToken: "current-token" },
@@ -317,7 +317,7 @@ describe("authenticated environment HTTP requests", () => {
   );
 
   // MCP-created thread ids contain ":", which the request path percent-encodes.
-  // The DPoP proof must sign the URL that is actually sent, or the environment
+  // The DPoP proof must sign the URL that is actually sent, or the machine
   // rejects it as a URL mismatch.
   const MCP_THREAD_ID = ThreadId.make("mcp:3534bc83-1c17-4a1e-9118-601c2766d355");
   const MCP_THREAD_LOADERS: ReadonlyArray<
@@ -377,8 +377,8 @@ describe("authenticated environment HTTP requests", () => {
 
       expect(result).toEqual(DIFF_RESULT);
       expect(harness.authorizations).toEqual([
-        { expectedEnvironmentId: TARGET.environmentId },
-        { expectedEnvironmentId: TARGET.environmentId, rejectedAccessToken: "current-token" },
+        { expectedMachineId: TARGET.machineId },
+        { expectedMachineId: TARGET.machineId, rejectedAccessToken: "current-token" },
       ]);
       expect(harness.calls.map((call) => call.url)).toEqual([
         `${CURRENT_ORIGIN}/api/pull-requests/diff`,
@@ -416,7 +416,7 @@ describe("authenticated environment HTTP requests", () => {
               Option.getOrThrow(harness.input.signer),
             ),
             Layer.succeed(
-              RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization,
+              RemoteMachineAuthorization.RemoteMachineAuthorization,
               harness.remoteAuthorization,
             ),
           ),
@@ -477,17 +477,17 @@ describe("authenticated environment HTTP requests", () => {
     {
       name: "missing credential",
       reply: () => credentialRejectedResponse("missing_credential"),
-      errorTag: "EnvironmentAuthInvalidError",
+      errorTag: "MachineAuthInvalidError",
     },
     {
       name: "Cloudflare 530",
       reply: () => new Response("error code: 1033", { status: 530 }),
-      errorTag: "RemoteEnvironmentAuthUndeclaredStatusError",
+      errorTag: "RemoteMachineAuthUndeclaredStatusError",
     },
     {
       name: "network failure",
       reply: () => Promise.reject(new Error("Network unreachable")),
-      errorTag: "RemoteEnvironmentAuthFetchError",
+      errorTag: "RemoteMachineAuthFetchError",
     },
   ])("does not renew or retry on $name", ({ reply, errorTag }) =>
     Effect.gen(function* () {
@@ -499,7 +499,7 @@ describe("authenticated environment HTTP requests", () => {
 
       expect(error._tag).toBe(errorTag);
       expect(harness.calls).toHaveLength(1);
-      expect(harness.authorizations).toEqual([{ expectedEnvironmentId: TARGET.environmentId }]);
+      expect(harness.authorizations).toEqual([{ expectedMachineId: TARGET.machineId }]);
     }),
   );
 
@@ -514,7 +514,7 @@ describe("authenticated environment HTTP requests", () => {
 
       expect(result).toEqual(SESSION);
       expect(harness.authorizations[1]).toEqual({
-        expectedEnvironmentId: TARGET.environmentId,
+        expectedMachineId: TARGET.machineId,
         rejectedAccessToken: "current-token",
       });
       expect(harness.calls).toHaveLength(2);
@@ -530,8 +530,8 @@ describe("authenticated environment HTTP requests", () => {
       );
 
       expect(error).toMatchObject({
-        _tag: "RemoteEnvironmentAuthFetchError",
-        message: "The environment rejected the renewed session authorization.",
+        _tag: "RemoteMachineAuthFetchError",
+        message: "The machine rejected the renewed session authorization.",
       });
       expect(harness.calls).toHaveLength(2);
     }),
@@ -569,7 +569,7 @@ describe("authenticated environment HTTP requests", () => {
         reason: "transport",
         detail: "Relay unavailable",
       });
-      const remoteAuthorization = RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization.of({
+      const remoteAuthorization = RemoteMachineAuthorization.RemoteMachineAuthorization.of({
         ...harness.remoteAuthorization,
         authorizeDpopHttp: () => Effect.fail(failure),
       });
@@ -579,8 +579,8 @@ describe("authenticated environment HTTP requests", () => {
       }).pipe(Effect.provide(harness.httpLayer), Effect.flip);
 
       expect(error).toMatchObject({
-        _tag: "RemoteEnvironmentAuthFetchError",
-        message: "Could not authorize the environment request.",
+        _tag: "RemoteMachineAuthFetchError",
+        message: "Could not authorize the machine request.",
         cause: failure,
       });
       expect(harness.calls).toEqual([]);
@@ -597,8 +597,8 @@ describe("authenticated environment HTTP requests", () => {
       }).pipe(Effect.provide(harness.httpLayer), Effect.flip);
 
       expect(error).toMatchObject({
-        _tag: "RemoteEnvironmentAuthFetchError",
-        message: "No relay authorization service is available for the environment request.",
+        _tag: "RemoteMachineAuthFetchError",
+        message: "No relay authorization service is available for the machine request.",
       });
       expect(harness.calls).toEqual([]);
     }),

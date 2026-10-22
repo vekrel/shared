@@ -20,7 +20,7 @@ export function providerAuthReturnUrl(value: string | undefined): string | undef
     for (const key of Array.from(url.searchParams.keys())) {
       if (
         url.pathname === "/welcome" ||
-        !["machine", "project", "checkout", "environmentId", "instanceId"].includes(key)
+        !["machine", "project", "checkout", "machineId", "instanceId"].includes(key)
       ) {
         url.searchParams.delete(key);
       }

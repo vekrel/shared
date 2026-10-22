@@ -1,17 +1,17 @@
-import { EnvironmentId, ProviderInstanceId } from "@vekrel/contracts";
+import { MachineId, ProviderInstanceId } from "@vekrel/contracts";
 import * as Schema from "effect/Schema";
 import { providerAuthReturnUrl } from "./providerAuthReturnUrl.ts";
 
 export const CodexAuthHandoff = Schema.Struct({
   authorizationUrl: Schema.String.check(Schema.isMaxLength(16_384)),
   returnUrl: Schema.String.check(Schema.isMaxLength(4_096)),
-  environmentId: EnvironmentId,
+  machineId: MachineId,
   instanceId: ProviderInstanceId,
   flowId: Schema.NonEmptyString.check(Schema.isMaxLength(128)),
 });
 export type CodexAuthHandoff = typeof CodexAuthHandoff.Type;
 const Delivery = Schema.Struct({
-  environmentId: EnvironmentId,
+  machineId: MachineId,
   instanceId: ProviderInstanceId,
   flowId: Schema.NonEmptyString.check(Schema.isMaxLength(128)),
   callbackUrl: Schema.String.check(Schema.isMaxLength(16_384)),
@@ -123,7 +123,7 @@ export function codexAuthDeliveryUrl(input: CodexAuthHandoff, callbackUrl: strin
   if (!destination) throw new Error("Invalid T3 Code return address.");
   const url = new URL(destination);
   const delivery = {
-    environmentId: input.environmentId,
+    machineId: input.machineId,
     instanceId: input.instanceId,
     flowId: input.flowId,
     callbackUrl,

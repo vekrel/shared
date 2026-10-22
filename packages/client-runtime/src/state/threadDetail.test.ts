@@ -1,5 +1,5 @@
 import {
-  EnvironmentId,
+  MachineId,
   MessageId,
   RunId,
   TurnItemId,
@@ -100,7 +100,7 @@ describe("lastVisitedAtAtom", () => {
       AsyncResult.success({ ...EMPTY_ENVIRONMENT_THREAD_STATE, data: Option.some(projection) }),
     );
     const details = createEnvironmentThreadDetailAtoms(() => state);
-    const ref = { environmentId: EnvironmentId.make("env"), threadId: v2ThreadId };
+    const ref = { machineId: MachineId.make("env"), threadId: v2ThreadId };
     const registry = AtomRegistry.make();
     const unmountQuiet = registry.mount(details.quietThreadAtom(ref));
     const unmountVisit = registry.mount(details.lastVisitedAtAtom(ref));
@@ -121,7 +121,7 @@ describe("lastVisitedAtAtom", () => {
 });
 
 describe("quietThreadAtom", () => {
-  const ref = { environmentId: EnvironmentId.make("environment-1"), threadId: v2ThreadId };
+  const ref = { machineId: MachineId.make("machine-1"), threadId: v2ThreadId };
 
   function setup(initial: OrchestrationV2ThreadProjection) {
     const stateAtom = Atom.make(

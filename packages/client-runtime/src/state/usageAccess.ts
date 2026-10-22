@@ -29,7 +29,7 @@ export function resolveUsageAccess(input: {
     return {
       canReadDiagnostics: false,
       isPending,
-      error: isPending ? null : "This environment is not connected.",
+      error: isPending ? null : "This machine is not connected.",
     };
   }
   const canReadDiagnostics = sessionGrantsScope(input.session, AuthDiagnosticsReadScope);

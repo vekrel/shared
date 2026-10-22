@@ -9,14 +9,14 @@ import * as BoundedThreadSnapshotHttp from "./boundedThreadSnapshotHttp.ts";
 import * as ThreadSnapshotLoader from "./threadSnapshotHttp.ts";
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: "environment-bounded" as never,
+  machineId: "machine-bounded" as never,
   label: "Bounded",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 
 const PREPARED: PreparedConnection = {
-  environmentId: TARGET.environmentId,
+  machineId: TARGET.machineId,
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
   socketUrl: TARGET.wsBaseUrl,

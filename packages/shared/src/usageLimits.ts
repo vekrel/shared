@@ -1,5 +1,5 @@
 import {
-  type EnvironmentId,
+  type MachineId,
   type UsageLimitsReport,
   type ProviderInstanceId,
   type ProviderConsumeResetCreditInput,
@@ -68,7 +68,7 @@ function providersWithLimits(providers: readonly ServerProvider[]): readonly Ser
 }
 
 export type LimitPresentations = ReadonlyMap<
-  EnvironmentId,
+  MachineId,
   {
     readonly entry: { readonly target: { readonly label: string } };
     readonly serverConfig: {
@@ -159,13 +159,13 @@ export interface LimitAccount {
   readonly email: string | undefined;
   readonly plan: string | undefined;
   readonly accentColor: string | undefined;
-  readonly environments: ReadonlyArray<{
-    readonly environmentId: EnvironmentId;
+  readonly machines: ReadonlyArray<{
+    readonly machineId: MachineId;
     readonly label: string;
   }>;
   readonly sourceLabel: string | null;
   readonly redeem: {
-    readonly environmentId: EnvironmentId;
+    readonly machineId: MachineId;
     readonly input: ProviderConsumeResetCreditInput;
   } | null;
   readonly limits: ServerProviderUsageLimits;
@@ -203,11 +203,11 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
       return;
     }
     const fresher = Date.parse(next.limits.checkedAt) > Date.parse(previous.limits.checkedAt);
-    const environments = [
-      ...previous.environments,
-      ...next.environments.filter(
+    const machines = [
+      ...previous.machines,
+      ...next.machines.filter(
         (candidate) =>
-          !previous.environments.some((seen) => seen.environmentId === candidate.environmentId),
+          !previous.machines.some((seen) => seen.machineId === candidate.machineId),
       ),
     ];
     const winner = fresher ? next : previous;
@@ -217,8 +217,8 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
       displayName: previous.displayName ?? next.displayName,
       plan: previous.plan ?? next.plan,
       accentColor: previous.accentColor ?? next.accentColor,
-      environments,
-      sourceLabel: environments.length > 0 ? null : (previous.sourceLabel ?? next.sourceLabel),
+      machines,
+      sourceLabel: machines.length > 0 ? null : (previous.sourceLabel ?? next.sourceLabel),
       redeem:
         hubRedeems.get(key)?.redeem ??
         (creditSource ? creditSource.redeem : (winner.redeem ?? previous.redeem ?? next.redeem)),
@@ -238,26 +238,26 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
       ...(presentation.serverConfig?.usageLimitSources ?? []).flatMap((source) => source.accounts),
     ]),
   );
-  for (const [environmentId, presentation] of presentations) {
+  for (const [machineId, presentation] of presentations) {
     const label = presentation.entry.target.label;
     for (const provider of providersWithLimits(presentation.serverConfig?.providers ?? [])) {
       if (!provider.usageLimits || limitsNotice(provider.usageLimits) !== null) continue;
-      merge(resolveKey(nativeReport(provider)) ?? `${environmentId}:${provider.instanceId}`, {
-        key: `${environmentId}:${provider.instanceId}`,
+      merge(resolveKey(nativeReport(provider)) ?? `${machineId}:${provider.instanceId}`, {
+        key: `${machineId}:${provider.instanceId}`,
         driver: provider.driver,
         displayName: provider.displayName?.trim() || null,
         email: provider.auth.email,
         plan: provider.auth.label,
         accentColor: provider.accentColor,
-        environments: [{ environmentId, label }],
+        machines: [{ machineId, label }],
         sourceLabel: null,
-        redeem: { environmentId, input: { instanceId: provider.instanceId } },
+        redeem: { machineId, input: { instanceId: provider.instanceId } },
         limits: provider.usageLimits,
       });
     }
   }
   const labelEnvironment = presentations.size > 1;
-  for (const [environmentId, presentation] of presentations) {
+  for (const [machineId, presentation] of presentations) {
     for (const source of presentation.serverConfig?.usageLimitSources ?? []) {
       const sourceLabel = labelEnvironment
         ? `${presentation.entry.target.label} · ${source.label}`
@@ -272,11 +272,11 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
           email: account.email,
           plan: account.plan,
           accentColor: undefined,
-          environments: [],
+          machines: [],
           sourceLabel,
           redeem: account.usageLimits.resetCredits?.nextCreditId
             ? {
-                environmentId,
+                machineId,
                 input: {
                   sourceId: source.id,
                   accountId: account.id,

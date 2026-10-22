@@ -1,6 +1,6 @@
 import {
   DEFAULT_SERVER_SETTINGS,
-  EnvironmentId,
+  MachineId,
   UsageDay,
   UsageReadError,
   USAGE_CONTRACT_VERSION,
@@ -35,13 +35,13 @@ import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import { createServerEnvironmentAtoms } from "./server.ts";
+import { createServerMachineAtoms } from "./server.ts";
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("usage-environment"),
-  label: "Usage environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  machineId: MachineId.make("usage-machine"),
+  label: "Usage machine",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 
 const INPUT: UsageSummaryInput = {
@@ -52,7 +52,7 @@ const INPUT: UsageSummaryInput = {
 
 const CONFIG = {
   settings: DEFAULT_SERVER_SETTINGS,
-  environment: { serverVersion: "0.0.1", capabilities: {} },
+  machine: { serverVersion: "0.0.1", capabilities: {} },
 } as ServerConfig;
 
 const PRICING = { status: "unavailable" as const, source: "test", fetchedAt: null, knownModels: 0 };
@@ -149,7 +149,7 @@ const makeHarness = Effect.fn("ServerUsageTest.makeHarness")(function* (
     disconnect: Effect.void,
     retryNow: Effect.void,
   });
-  const environments = EnvironmentRegistry.EnvironmentRegistry.of({
+  const machines = EnvironmentRegistry.EnvironmentRegistry.of({
     run: (_environmentId, effect) =>
       Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
     followStream: (_environmentId, stream) =>
@@ -171,12 +171,12 @@ const makeHarness = Effect.fn("ServerUsageTest.makeHarness")(function* (
   });
   const runtime = Atom.runtime(
     Layer.merge(
-      Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environments),
+      Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, machines),
       Layer.succeed(Persistence.EnvironmentCacheStore, cache),
     ),
   );
   const initialConfigValueAtom = Atom.make(CONFIG);
-  const atoms = createServerEnvironmentAtoms(runtime, {
+  const atoms = createServerMachineAtoms(runtime, {
     initialConfigValueAtom: () => initialConfigValueAtom,
   });
   const registry = yield* Effect.acquireRelease(Effect.sync(AtomRegistry.make), (registry) =>
@@ -192,7 +192,7 @@ const makeHarness = Effect.fn("ServerUsageTest.makeHarness")(function* (
       payload: { settings },
     });
     // An equal settings document keeps the previous object, so match on content.
-    yield* AtomRegistry.toStream(registry, atoms.settingsValueAtom(TARGET.environmentId)).pipe(
+    yield* AtomRegistry.toStream(registry, atoms.settingsValueAtom(TARGET.machineId)).pipe(
       Stream.filter((current) => current !== null && sameServerSettings(current, next)),
       Stream.runHead,
     );
@@ -203,7 +203,7 @@ const makeHarness = Effect.fn("ServerUsageTest.makeHarness")(function* (
     requests: () => requests,
     inputs: () => inputs,
     updateSettings,
-    summary: (input = INPUT) => atoms.usageSummary({ environmentId: TARGET.environmentId, input }),
+    summary: (input = INPUT) => atoms.usageSummary({ machineId: TARGET.machineId, input }),
   };
 });
 

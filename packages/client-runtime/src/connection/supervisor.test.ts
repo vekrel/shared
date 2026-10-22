@@ -1,4 +1,4 @@
-import { AuthStandardClientScopes, EnvironmentId, type ServerConfig } from "@vekrel/contracts";
+import { AuthStandardClientScopes, MachineId, type ServerConfig } from "@vekrel/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -10,7 +10,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
 
-import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
+import * as RemoteMachineAuthorization from "../authorization/service.ts";
 import * as TokenStore from "../authorization/tokenStore.ts";
 import * as ClientCapabilities from "../platform/capabilities.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
@@ -40,14 +40,14 @@ import * as ConnectionWakeups from "./wakeups.ts";
 import { connectionRouteId, entryWithRoutes, isLearned, mergeLearnedRoutes } from "./routes.ts";
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Test environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  machineId: MachineId.make("machine-1"),
+  label: "Test machine",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 
 const RELAY_TARGET = new RelayConnectionTarget({
-  environmentId: TARGET.environmentId,
+  machineId: TARGET.machineId,
   label: TARGET.label,
 });
 
@@ -64,10 +64,10 @@ const RELAY_ENTRY: ConnectionCatalogEntry = {
 };
 
 const PREPARED_CONNECTION: PreparedConnection = {
-  environmentId: TARGET.environmentId,
+  machineId: TARGET.machineId,
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
-  socketUrl: "wss://environment.example.test/ws",
+  socketUrl: "wss://machine.example.test/ws",
   httpAuthorization: null,
   target: TARGET,
 };
@@ -75,7 +75,7 @@ const PREPARED_CONNECTION: PreparedConnection = {
 const TEST_RPC_CLIENT = {} as WsRpcProtocolClient;
 
 const LAN_TARGET = new BearerConnectionTarget({
-  environmentId: TARGET.environmentId,
+  machineId: TARGET.machineId,
   label: TARGET.label,
   connectionId: "bearer:lan",
 });
@@ -84,7 +84,7 @@ const LAN_ROUTE: ConnectionRoute = {
   profile: Option.some(
     new BearerConnectionProfile({
       connectionId: LAN_TARGET.connectionId,
-      environmentId: TARGET.environmentId,
+      machineId: TARGET.machineId,
       label: TARGET.label,
       httpBaseUrl: "http://192.168.1.10:3773/",
       wsBaseUrl: "ws://192.168.1.10:3773/",
@@ -386,7 +386,7 @@ describe("EnvironmentSupervisor", () => {
         lastFailure: {
           _tag: "ConnectionTransientError",
           reason: "transport",
-          message: "Test environment connection failed unexpectedly.",
+          message: "Test machine connection failed unexpectedly.",
         },
       });
 
@@ -486,7 +486,7 @@ describe("EnvironmentSupervisor", () => {
         lastFailure: {
           _tag: "ConnectionTransientError",
           reason: "timeout",
-          message: "Test environment did not respond during connection setup.",
+          message: "Test machine did not respond during connection setup.",
         },
       });
       expect(yield* Ref.get(harness.prepareCount)).toBe(1);
@@ -823,7 +823,7 @@ describe("EnvironmentSupervisor", () => {
       const token = yield* Ref.make(
         Option.some(
           new TokenStore.RemoteDpopAccessToken({
-            environmentId: TARGET.environmentId,
+            machineId: TARGET.machineId,
             accountId: "test-account",
             label: TARGET.label,
             endpoint,
@@ -842,10 +842,10 @@ describe("EnvironmentSupervisor", () => {
         const pathname = new URL(request.url).pathname;
         httpPaths.push(pathname);
         switch (pathname) {
-          case "/.well-known/t3/environment":
+          case "/.well-known/vekrel/machine":
             return Promise.resolve(
               Response.json({
-                environmentId: TARGET.environmentId,
+                machineId: TARGET.machineId,
                 label: TARGET.label,
                 platform: { os: "linux", arch: "x64" },
                 serverVersion: "0.0.0-test",
@@ -896,23 +896,23 @@ describe("EnvironmentSupervisor", () => {
       const unused = () => Effect.die("Unexpected relay operation.");
       const relay = ManagedRelay.ManagedRelayClient.of({
         relayUrl: "https://relay.example.test",
-        listEnvironments: unused,
+        listMachines: unused,
         listDevices: unused,
-        createEnvironmentLinkChallenge: unused,
-        linkEnvironment: unused,
-        unlinkEnvironment: unused,
-        getEnvironmentStatus: unused,
-        connectEnvironment: Effect.fn("TestConnectionHttp.connectEnvironment")(function* () {
+        createMachineLinkChallenge: unused,
+        linkMachine: unused,
+        unlinkMachine: unused,
+        getMachineStatus: unused,
+        connectMachine: Effect.fn("TestConnectionHttp.connectMachine")(function* () {
           yield* Ref.update(bootstrapCalls, (count) => count + 1);
           if (yield* Ref.get(bootstrapFails)) {
             return yield* new ManagedRelay.ManagedRelayRequestTimeoutError({
-              activity: "Relay environment connection",
+              activity: "Relay machine connection",
               timeoutMs: 6_000,
               traceId: null,
             });
           }
           return {
-            environmentId: TARGET.environmentId,
+            machineId: TARGET.machineId,
             endpoint,
             credential: "relay-bootstrap",
             expiresAt: "2026-09-04T01:00:00.000Z",
@@ -925,7 +925,7 @@ describe("EnvironmentSupervisor", () => {
         resetTokenCache: Effect.void,
       });
       const layerHttp = RpcHttp.layerRemoteHttpClient(fetchFn);
-      const remoteAuthorization = yield* RemoteEnvironmentAuthorization.make.pipe(
+      const remoteAuthorization = yield* RemoteMachineAuthorization.make.pipe(
         Effect.provide(
           Layer.mergeAll(
             layerHttp,
@@ -952,7 +952,7 @@ describe("EnvironmentSupervisor", () => {
       const harness = yield* makeHarness({
         prepare: () =>
           remoteAuthorization
-            .authorizeDpop({ expectedEnvironmentId: TARGET.environmentId })
+            .authorizeDpop({ expectedMachineId: TARGET.machineId })
             .pipe(Effect.map((prepared) => ({ ...prepared, target: RELAY_TARGET }))),
       });
       const supervisor = yield* EnvironmentSupervisor.make(RELAY_ENTRY, {
@@ -981,7 +981,7 @@ describe("EnvironmentSupervisor", () => {
       yield* TestClock.adjust("2 hours");
       yield* Ref.set(bootstrapFails, true);
       const failure = yield* readSession.pipe(Effect.flip);
-      expect(failure._tag).toBe("RemoteEnvironmentAuthFetchError");
+      expect(failure._tag).toBe("RemoteMachineAuthFetchError");
       expect(yield* Ref.get(bootstrapCalls)).toBe(2);
       expect(sessionAuthorizations).toEqual(["DPoP access-token-2"]);
       expect(httpPaths.filter((path) => path === "/api/auth/websocket-ticket")).toHaveLength(1);
@@ -1046,7 +1046,7 @@ describe("EnvironmentSupervisor routes", () => {
         checkRoute: () => Effect.succeed("answered"),
         prepare: (_attempt, target) =>
           target._tag === "BearerConnectionTarget"
-            ? Effect.fail(blocked("The environment credential is invalid."))
+            ? Effect.fail(blocked("The machine credential is invalid."))
             : Effect.succeed(preparedFor(target)),
       });
       const supervisor = yield* EnvironmentSupervisor.make(LAN_THEN_RELAY_ENTRY, {
@@ -1228,7 +1228,7 @@ describe("EnvironmentSupervisor routes", () => {
         "BearerConnectionTarget",
       );
       expect(yield* Ref.get(learned)).toEqual([
-        `learned:${TARGET.environmentId}:http://192.168.1.10:3773`,
+        `learned:${TARGET.machineId}:http://192.168.1.10:3773`,
       ]);
     }),
   );

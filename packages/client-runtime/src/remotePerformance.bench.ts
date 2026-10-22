@@ -1,5 +1,5 @@
 import {
-  EnvironmentId,
+  MachineId,
   EventId,
   MessageId,
   type OrchestrationV2DomainEvent,
@@ -12,8 +12,8 @@ import { describe, test } from "vite-plus/test";
 
 import { issueRemoteWebSocketTicket } from "./authorization/remote.ts";
 import { PrimaryConnectionTarget } from "./connection/model.ts";
-import { fetchRemoteEnvironmentDescriptor } from "./environment/descriptor.ts";
-import type { RemoteEnvironmentRequestError } from "./rpc/http.ts";
+import { fetchRemoteMachineDescriptor } from "./machine/descriptor.ts";
+import type { RemoteMachineRequestError } from "./rpc/http.ts";
 import { fetchEnvironmentThreadSnapshot } from "./state/threadSnapshotHttp.ts";
 import { applyOrchestrationV2ProjectionEvent } from "./state/orchestrationV2Projection.ts";
 import { v2Projection, v2Now } from "./state/orchestrationV2TestFixtures.ts";
@@ -38,14 +38,14 @@ const thread: OrchestrationV2ThreadProjection = {
   })),
 };
 const target = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("remote-1"),
+  machineId: MachineId.make("remote-1"),
   label: "Remote",
   httpBaseUrl: "https://remote.example.test",
   wsBaseUrl: "wss://remote.example.test/ws",
 });
 const responses = {
-  "/.well-known/t3/environment": {
-    environmentId: target.environmentId,
+  "/.well-known/vekrel/machine": {
+    machineId: target.machineId,
     label: target.label,
     platform: { os: "linux", arch: "x64" },
     serverVersion: "0.0.0-test",
@@ -62,9 +62,9 @@ const httpClient = HttpClient.make((request) =>
 );
 const requests: Record<
   string,
-  Effect.Effect<unknown, RemoteEnvironmentRequestError, HttpClient.HttpClient>
+  Effect.Effect<unknown, RemoteMachineRequestError, HttpClient.HttpClient>
 > = {
-  "read remote connection descriptor": fetchRemoteEnvironmentDescriptor({
+  "read remote connection descriptor": fetchRemoteMachineDescriptor({
     httpBaseUrl: target.httpBaseUrl,
   }),
   "issue remote WebSocket ticket": issueRemoteWebSocketTicket({
@@ -73,7 +73,7 @@ const requests: Record<
   }),
   "load remote snapshot with 100 messages": fetchEnvironmentThreadSnapshot({
     prepared: {
-      environmentId: target.environmentId,
+      machineId: target.machineId,
       label: target.label,
       httpBaseUrl: target.httpBaseUrl,
       socketUrl: target.wsBaseUrl,

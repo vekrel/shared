@@ -2,7 +2,7 @@ import { backgroundWorkHoldsCompletion } from "@vekrel/shared/orchestrationV2Pen
 import { threadPullRequestsOf } from "@vekrel/shared/threadPullRequests";
 import type {
   ThreadLinkedPullRequest,
-  EnvironmentId,
+  MachineId,
   MessageId,
   OrchestrationProjectShell,
   OrchestrationV2ProviderGoal,
@@ -21,7 +21,7 @@ import * as DateTime from "effect/DateTime";
 import { formatSubagentDisplayTitle } from "./subagentDisplay.ts";
 
 export interface EnvironmentProject extends OrchestrationProjectShell {
-  readonly environmentId: EnvironmentId;
+  readonly machineId: MachineId;
   readonly isScratch?: true;
 }
 
@@ -30,7 +30,7 @@ export interface EnvironmentProject extends OrchestrationProjectShell {
  * shared collections retain their identities.
  */
 export interface EnvironmentThread {
-  readonly environmentId: EnvironmentId;
+  readonly machineId: MachineId;
   readonly projection: OrchestrationV2ThreadProjection;
 }
 
@@ -73,7 +73,7 @@ export type ThreadStructure = Omit<
 };
 
 export interface EnvironmentThreadStructure {
-  readonly environmentId: EnvironmentId;
+  readonly machineId: MachineId;
   readonly projection: ThreadStructure;
 }
 
@@ -135,7 +135,7 @@ function threadRunStatusIsActive(status: ThreadRuntimeSummary["status"]): boolea
 }
 
 export interface EnvironmentThreadShell {
-  readonly environmentId: EnvironmentId;
+  readonly machineId: MachineId;
   readonly id: ThreadId;
   readonly projectId: ProjectId;
   readonly title: string;
@@ -181,7 +181,7 @@ export interface EnvironmentThreadShell {
   readonly linkedPullRequest?: ThreadLinkedPullRequest | null;
   readonly branchPullRequest?: ThreadLinkedPullRequest | null;
   /**
-   * Server-tracked visited watermark. `undefined` means the environment's
+   * Server-tracked visited watermark. `undefined` means the machine's
    * server predates visited tracking and clients should fall back to any
    * local visited state they keep.
    */
@@ -239,16 +239,16 @@ function shellRuntime(thread: OrchestrationV2ThreadShell): ThreadRuntimeSummary 
 }
 
 export function scopeProject(
-  environmentId: EnvironmentId,
+  machineId: MachineId,
   project: OrchestrationProjectShell,
 ): EnvironmentProject {
-  return { ...project, environmentId };
+  return { ...project, machineId };
 }
 
 export type PendingSubagentRequest = "approval" | "user_input";
 
 export function presentThreadShell(
-  environmentId: EnvironmentId,
+  machineId: MachineId,
   thread: OrchestrationV2ThreadShell,
   pendingSubagentRequest: PendingSubagentRequest | null = null,
 ): EnvironmentThreadShell {
@@ -276,7 +276,7 @@ export function presentThreadShell(
     runtime?.status === "starting" ||
     runtime?.status === "running";
   return {
-    environmentId,
+    machineId,
     id: thread.id,
     projectId: thread.projectId,
     title:
@@ -345,10 +345,10 @@ export function presentThreadShell(
 }
 
 export function scopeThreadShell(
-  environmentId: EnvironmentId,
+  machineId: MachineId,
   thread: OrchestrationV2ThreadShell,
 ): EnvironmentThreadShell {
-  return presentThreadShell(environmentId, thread);
+  return presentThreadShell(machineId, thread);
 }
 
 const THREAD_PROVIDER_STACK_LIMIT = 3;

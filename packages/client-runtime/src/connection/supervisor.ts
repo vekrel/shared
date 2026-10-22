@@ -131,9 +131,9 @@ function retryDelayMs(failureCount: number, random: number): number {
 
 function annotateTarget(target: ConnectionTarget) {
   return Effect.annotateCurrentSpan({
-    "environment.id": target.environmentId,
-    "environment.label": target.label,
-    "environment.target.kind": target._tag,
+    "machine.id": target.machineId,
+    "machine.label": target.label,
+    "machine.target.kind": target._tag,
   });
 }
 
@@ -370,11 +370,11 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   });
 
   const logManagedRelayAccountChange = Effect.logInfo(
-    "Managed relay account changed; restarting the environment connection.",
+    "Managed relay account changed; restarting the machine connection.",
   ).pipe(
     Effect.annotateLogs({
-      "environment.id": target.environmentId,
-      "environment.label": target.label,
+      "machine.id": target.machineId,
+      "machine.label": target.label,
     }),
   );
 
@@ -746,8 +746,8 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
         const defect = establishment.exit.cause.reasons.find(Cause.isDieReason)?.defect;
         yield* Effect.logError("Connection attempt failed with an unexpected defect.").pipe(
           Effect.annotateLogs({
-            "environment.id": target.environmentId,
-            "environment.label": target.label,
+            "machine.id": target.machineId,
+            "machine.label": target.label,
             "cause.reason_count": establishment.exit.cause.reasons.length,
             ...safeErrorLogAttributes(defect),
           }),
@@ -828,9 +828,9 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
         Effect.withSpan("EnvironmentSupervisor.connectionLost", {
           root: true,
           attributes: {
-            "environment.id": target.environmentId,
-            "environment.label": target.label,
-            "environment.target.kind": target._tag,
+            "machine.id": target.machineId,
+            "machine.label": target.label,
+            "machine.target.kind": target._tag,
             "connection.connected_ms": connectedForMs,
             "connection.failure.reason": outcome.failure.error.reason,
             "connection.failure.detail": outcome.failure.error.detail,

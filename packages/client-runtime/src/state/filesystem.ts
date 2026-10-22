@@ -34,7 +34,7 @@ export function resolveFilesystemReadAccess(input: {
   }
   if (input.session === null) {
     // Wait for the catalog before interpreting a missing presentation as offline.
-    // Once ready, an offline environment cannot finish its session check.
+    // Once ready, an offline machine cannot finish its session check.
     const isPending =
       !input.isCatalogReady ||
       input.connection?.phase === "connected" ||
@@ -43,7 +43,7 @@ export function resolveFilesystemReadAccess(input: {
     return {
       canReadFiles: false,
       isPending,
-      error: isPending ? null : (input.connection?.error ?? "This environment is not connected."),
+      error: isPending ? null : (input.connection?.error ?? "This machine is not connected."),
     };
   }
   return {
@@ -116,11 +116,11 @@ export function createFilesystemEnvironmentAtoms<R, E>(
 ) {
   return {
     getMetadata: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:filesystem:get-metadata",
+      label: "machine-data:filesystem:get-metadata",
       tag: WS_METHODS.filesystemGetMetadata,
     }),
     browse: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:filesystem:browse",
+      label: "machine-data:filesystem:browse",
       tag: WS_METHODS.filesystemBrowse,
     }),
   };

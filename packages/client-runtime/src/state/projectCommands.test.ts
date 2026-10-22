@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   AuthFilesystemWriteScope,
-  EnvironmentId,
+  MachineId,
   ProjectId,
   ProjectReadFileInput,
   ProjectReadFileResult,
@@ -31,17 +31,17 @@ import { createProjectEnvironmentAtoms } from "./projectCommands.ts";
 
 const decodeReadFileInput = Schema.decodeUnknownSync(ProjectReadFileInput);
 const decodeReadFileResult = Schema.decodeUnknownSync(ProjectReadFileResult);
-const ENVIRONMENT_ID = EnvironmentId.make("environment-1");
+const MACHINE_ID = MachineId.make("machine-1");
 vi.mock("./session.ts", () => ({
   createEnvironmentSessionAtoms: () => ({ sessionStateAtom: sessions }),
 }));
-const sessions = Atom.family((_id: EnvironmentId) =>
+const sessions = Atom.family((_id: MachineId) =>
   Atom.make<AsyncResult.AsyncResult<AuthSessionState>>(AsyncResult.initial()),
 );
 const PROJECT_ID = ProjectId.make("scratch");
 const PROJECT = {
   id: PROJECT_ID,
-  environmentId: ENVIRONMENT_ID,
+  machineId: MACHINE_ID,
   workspaceRoot: "/scratch",
 } as EnvironmentProject;
 
@@ -53,7 +53,7 @@ const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
     missing: false,
   };
   const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
-    target: { environmentId: ENVIRONMENT_ID },
+    target: { machineId: MACHINE_ID },
     session: yield* SubscriptionRef.make(
       Option.some({
         client: {
@@ -118,14 +118,14 @@ const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
   const storedProject = Atom.make<EnvironmentProject | null>(null);
   const commands = createProjectEnvironmentAtoms(runtime, {
     projectAtom: (ref: ScopedProjectRef) =>
-      ref.environmentId === ENVIRONMENT_ID && ref.projectId === PROJECT_ID
+      ref.machineId === MACHINE_ID && ref.projectId === PROJECT_ID
         ? storedProject
         : Atom.make(null),
   });
   const registry = AtomRegistry.make();
   yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
   registry.set(
-    sessions(ENVIRONMENT_ID),
+    sessions(MACHINE_ID),
     AsyncResult.success({
       authenticated: true,
       auth: {
@@ -139,7 +139,7 @@ const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
     }),
   );
   const openScratch = Effect.promise(() =>
-    commands.openScratch.run(registry, { environmentId: ENVIRONMENT_ID, input: {} }),
+    commands.openScratch.run(registry, { machineId: MACHINE_ID, input: {} }),
   );
   return { registry, storedProject, openScratch, commands, metadataRequests, readResponse };
 });
@@ -153,7 +153,7 @@ describe("writeFile metadata", () => {
       expect.soft(decodeReadFileInput(input)).toEqual(input);
       const result = yield* AtomRegistry.getResult(
         h.registry,
-        h.commands.readFile({ environmentId: ENVIRONMENT_ID, input }),
+        h.commands.readFile({ machineId: MACHINE_ID, input }),
         { suspendOnWaiting: true },
       );
       expect.soft(result).toEqual({
@@ -164,7 +164,7 @@ describe("writeFile metadata", () => {
         exists: false,
       });
       const metadata = h.commands.fileMetadata({
-        environmentId: ENVIRONMENT_ID,
+        machineId: MACHINE_ID,
         input: { path: "/repo/foo" },
       });
       expect(
@@ -178,9 +178,9 @@ describe("writeFile metadata", () => {
     Effect.gen(function* () {
       const h = yield* makeHarness();
       const threadId = ThreadId.make("stale-read-thread");
-      h.registry.mount(h.commands.fileMetadataThread({ environmentId: ENVIRONMENT_ID, threadId }));
+      h.registry.mount(h.commands.fileMetadataThread({ machineId: MACHINE_ID, threadId }));
       const metadata = h.commands.fileMetadata({
-        environmentId: ENVIRONMENT_ID,
+        machineId: MACHINE_ID,
         input: { path: "/repo/foo", threadId },
       });
       h.registry.mount(metadata);
@@ -195,7 +195,7 @@ describe("writeFile metadata", () => {
       const fileRead = yield* AtomRegistry.getResult(
         h.registry,
         h.commands.readFile({
-          environmentId: ENVIRONMENT_ID,
+          machineId: MACHINE_ID,
           input: { cwd: "/repo", relativePath: "foo" },
         }),
         { suspendOnWaiting: true },
@@ -203,7 +203,7 @@ describe("writeFile metadata", () => {
       yield* Deferred.await(started);
       const write = yield* Effect.promise(() =>
         h.commands.writeFile.run(h.registry, {
-          environmentId: ENVIRONMENT_ID,
+          machineId: MACHINE_ID,
           input: { cwd: "/repo", relativePath: "foo", contents: "new" },
         }),
       );
@@ -221,9 +221,9 @@ describe("writeFile metadata", () => {
     Effect.gen(function* () {
       const h = yield* makeHarness();
       const threadId = ThreadId.make("write-metadata-thread");
-      h.registry.mount(h.commands.fileMetadataThread({ environmentId: ENVIRONMENT_ID, threadId }));
+      h.registry.mount(h.commands.fileMetadataThread({ machineId: MACHINE_ID, threadId }));
       const atoms = ["/repo/foo", "/repo/./foo"].map((path) =>
-        h.commands.fileMetadata({ environmentId: ENVIRONMENT_ID, input: { path, threadId } }),
+        h.commands.fileMetadata({ machineId: MACHINE_ID, input: { path, threadId } }),
       );
       for (const atom of atoms) h.registry.mount(atom);
       const read = () =>
@@ -238,7 +238,7 @@ describe("writeFile metadata", () => {
       ]);
       const result = yield* Effect.promise(() =>
         h.commands.writeFile.run(h.registry, {
-          environmentId: ENVIRONMENT_ID,
+          machineId: MACHINE_ID,
           input: { cwd: "/repo", relativePath: "./foo", contents: "new" },
         }),
       );

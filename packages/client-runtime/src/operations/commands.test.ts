@@ -3,7 +3,7 @@ import {
   CheckpointRef,
   CheckpointScopeId,
   CommandId,
-  EnvironmentId,
+  MachineId,
   MessageId,
   NodeId,
   ORCHESTRATION_V2_WS_METHODS,
@@ -52,10 +52,10 @@ const layerTestCrypto = Layer.succeed(
 );
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Test environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  machineId: MachineId.make("machine-1"),
+  label: "Test machine",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 
 const makeSupervisor = Effect.fn("TestEnvironmentCommands.makeSupervisor")(function* (input: {
@@ -110,7 +110,7 @@ const makeSupervisor = Effect.fn("TestEnvironmentCommands.makeSupervisor")(funct
   const session: RpcSession.RpcSession = {
     client,
     initialConfig: Effect.succeed({
-      environment: {
+      machine: {
         capabilities: {
           repositoryIdentity: true,
           ...(input.advertiseThreadStop === true ? { threadStop: true } : {}),
@@ -136,7 +136,7 @@ const makeSupervisor = Effect.fn("TestEnvironmentCommands.makeSupervisor")(funct
   } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
 });
 
-describe("V2 environment commands", () => {
+describe("V2 machine commands", () => {
   it.effect("distinguishes sending a selected queued message from resuming queue order", () =>
     Effect.gen(function* () {
       const commands: OrchestrationV2Command[] = [];

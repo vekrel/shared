@@ -1,6 +1,6 @@
 import {
   CommandId,
-  EnvironmentId,
+  MachineId,
   MessageId,
   ORCHESTRATION_V2_WS_METHODS,
   OrchestrationV2RpcSchemas,
@@ -131,10 +131,10 @@ function makeLargeProjection(): OrchestrationV2ThreadProjection {
 }
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-perf"),
+  machineId: MachineId.make("machine-perf"),
   label: "Performance fixture",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 
 const layerTestCrypto = Layer.succeed(
@@ -167,7 +167,7 @@ const makeSupervisor = Effect.fn("CommandPerformance.makeSupervisor")(function* 
   const session: RpcSession.RpcSession = {
     client,
     initialConfig: Effect.succeed({
-      environment: {
+      machine: {
         capabilities: {
           repositoryIdentity: true,
           serverResolvedCommandContext: true,

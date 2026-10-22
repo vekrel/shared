@@ -1,4 +1,4 @@
-import { EnvironmentId, type OrchestrationV2ArchivedShellSnapshot } from "@vekrel/contracts";
+import { MachineId, type OrchestrationV2ArchivedShellSnapshot } from "@vekrel/contracts";
 import * as Arr from "effect/Array";
 import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
@@ -6,7 +6,7 @@ import * as Order from "effect/Order";
 import { AsyncResult, Atom } from "effect/reactivity";
 
 export interface ArchivedSnapshotEntry {
-  readonly environmentId: EnvironmentId;
+  readonly machineId: MachineId;
   readonly snapshot: OrchestrationV2ArchivedShellSnapshot;
 }
 
@@ -17,29 +17,29 @@ export interface ArchivedThreadSnapshotsState {
 }
 
 const ARCHIVED_THREADS_ENVIRONMENT_KEY_SEPARATOR = "\u001f";
-const environmentIdOrder = Order.String as Order.Order<EnvironmentId>;
+const machineIdOrder = Order.String as Order.Order<MachineId>;
 
 export function makeArchivedThreadsEnvironmentKey(
-  environmentIds: ReadonlyArray<EnvironmentId>,
+  machineIds: ReadonlyArray<MachineId>,
 ): string {
-  return pipe(environmentIds, Arr.sort(environmentIdOrder), (sortedEnvironmentIds) =>
-    sortedEnvironmentIds.join(ARCHIVED_THREADS_ENVIRONMENT_KEY_SEPARATOR),
+  return pipe(machineIds, Arr.sort(machineIdOrder), (sortedMachineIds) =>
+    sortedMachineIds.join(ARCHIVED_THREADS_ENVIRONMENT_KEY_SEPARATOR),
   );
 }
 
-function parseArchivedThreadsEnvironmentKey(key: string): ReadonlyArray<EnvironmentId> {
+function parseArchivedThreadsEnvironmentKey(key: string): ReadonlyArray<MachineId> {
   if (key.length === 0) {
     return [];
   }
   return pipe(
     key.split(ARCHIVED_THREADS_ENVIRONMENT_KEY_SEPARATOR),
-    Arr.map((environmentId) => EnvironmentId.make(environmentId)),
+    Arr.map((machineId) => MachineId.make(machineId)),
   );
 }
 
 export function createArchivedThreadSnapshotsAtomFamily<E>(options: {
   readonly getSnapshotAtom: (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   ) => Atom.Atom<AsyncResult.AsyncResult<OrchestrationV2ArchivedShellSnapshot, E>>;
   readonly labelPrefix: string;
 }) {
@@ -49,13 +49,13 @@ export function createArchivedThreadSnapshotsAtomFamily<E>(options: {
       let error: string | null = null;
       let isLoading = false;
 
-      for (const environmentId of parseArchivedThreadsEnvironmentKey(environmentKey)) {
-        const result = get(options.getSnapshotAtom(environmentId));
+      for (const machineId of parseArchivedThreadsEnvironmentKey(environmentKey)) {
+        const result = get(options.getSnapshotAtom(machineId));
         isLoading ||= result.waiting;
 
         const snapshot = Option.getOrNull(AsyncResult.value(result));
         if (snapshot !== null) {
-          snapshots.push({ environmentId, snapshot });
+          snapshots.push({ machineId, snapshot });
         }
 
         if (error === null && result._tag === "Failure") {

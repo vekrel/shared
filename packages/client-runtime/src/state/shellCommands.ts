@@ -9,7 +9,7 @@ export function createShellEnvironmentAtoms<R, E>(
 ) {
   return {
     openInEditor: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:shell:open-in-editor",
+      label: "machine-data:shell:open-in-editor",
       tag: WS_METHODS.shellOpenInEditor,
     }),
   };

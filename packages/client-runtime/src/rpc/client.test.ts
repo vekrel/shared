@@ -1,5 +1,5 @@
 import {
-  EnvironmentId,
+  MachineId,
   type RelayClientInstallProgressEvent,
   type ServerLifecycleStreamEvent,
   WS_METHODS,
@@ -29,10 +29,10 @@ import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import { runStream, subscribe, subscribeDynamicWithSession } from "./client.ts";
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Test environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  machineId: MachineId.make("machine-1"),
+  label: "Test machine",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 
 const INSTALL_CHECKING: RelayClientInstallProgressEvent = {
@@ -78,7 +78,7 @@ const makeHarness = Effect.fn("TestEnvironmentRpc.makeHarness")(function* () {
   };
 });
 
-describe("environment RPC", () => {
+describe("machine RPC", () => {
   it.effect("binds finite streaming commands to one active session", () =>
     Effect.gen(function* () {
       const firstEvents = yield* Queue.unbounded<RelayClientInstallProgressEvent>();

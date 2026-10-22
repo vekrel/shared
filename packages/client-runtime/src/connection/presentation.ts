@@ -22,7 +22,7 @@ export interface EnvironmentConnectionPresentation {
 
 /**
  * Provider statuses are pushed every few minutes with fresh `checkedAt` stamps, and every root
- * coordinator reads environment presentations. Leaving them out keeps a presentation stable
+ * coordinator reads machine presentations. Leaving them out keeps a presentation stable
  * across those pushes; provider readers subscribe to the server's providers atom instead.
  */
 export type EnvironmentServerConfig = Omit<ServerConfig, "providers">;

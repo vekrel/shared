@@ -1,7 +1,7 @@
 import {
-  resolveEnvironmentMachineKind,
-  type EnvironmentMachineKind,
-  type EnvironmentId,
+  resolveMachineKind,
+  type MachineKind,
+  type MachineId,
   type ServerConfig,
   type ServerProvider,
 } from "@vekrel/contracts";
@@ -17,7 +17,7 @@ import {
   type EnvironmentPresentation,
   type EnvironmentServerConfig,
 } from "../connection/presentation.ts";
-import { type EnvironmentCatalogState, enabledEnvironmentIds } from "./connections.ts";
+import { type EnvironmentCatalogState, enabledMachineIds } from "./connections.ts";
 import { hasRelayRoute } from "../connection/routes.ts";
 
 function mapsEqual<K, V>(left: ReadonlyMap<K, V>, right: ReadonlyMap<K, V>): boolean {
@@ -67,18 +67,18 @@ export interface EnvironmentPresentationWithProviders extends Omit<
 export function createEnvironmentPresentationAtoms<E>(input: {
   readonly catalogValueAtom: Atom.Atom<EnvironmentCatalogState>;
   readonly stateAtom: (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   ) => Atom.Atom<AsyncResult.AsyncResult<SupervisorConnectionState, E>>;
-  readonly serverConfigValueAtom: (environmentId: EnvironmentId) => Atom.Atom<ServerConfig | null>;
+  readonly serverConfigValueAtom: (machineId: MachineId) => Atom.Atom<ServerConfig | null>;
 }) {
-  const presentationAtom = Atom.family((environmentId: EnvironmentId) =>
+  const presentationAtom = Atom.family((machineId: MachineId) =>
     Atom.make((get) => {
-      const entry = get(input.catalogValueAtom).entries.get(environmentId);
+      const entry = get(input.catalogValueAtom).entries.get(machineId);
       if (entry === undefined) {
         return null;
       }
       const state = Option.getOrElse(
-        AsyncResult.value(get(input.stateAtom(environmentId))),
+        AsyncResult.value(get(input.stateAtom(machineId))),
         () => AVAILABLE_CONNECTION_STATE,
       );
       const previous = Option.getOrNull(get.self<EnvironmentPresentation | null>());
@@ -93,7 +93,7 @@ export function createEnvironmentPresentationAtoms<E>(input: {
             ? previous.connection
             : connection,
         serverConfig: withoutProviders(
-          get(input.serverConfigValueAtom(environmentId)),
+          get(input.serverConfigValueAtom(machineId)),
           previous?.serverConfig ?? null,
         ),
       } satisfies EnvironmentPresentation;
@@ -103,16 +103,16 @@ export function createEnvironmentPresentationAtoms<E>(input: {
         previous.serverConfig === next.serverConfig
         ? previous
         : next;
-    }).pipe(Atom.withLabel(`environment-presentation:${environmentId}`)),
+    }).pipe(Atom.withLabel(`machine-presentation:${machineId}`)),
   );
 
-  let previous: ReadonlyMap<EnvironmentId, EnvironmentPresentation> = new Map();
+  let previous: ReadonlyMap<MachineId, EnvironmentPresentation> = new Map();
   const presentationsAtom = Atom.make((get) => {
-    const next = new Map<EnvironmentId, EnvironmentPresentation>();
-    for (const environmentId of get(input.catalogValueAtom).entries.keys()) {
-      const presentation = get(presentationAtom(environmentId));
+    const next = new Map<MachineId, EnvironmentPresentation>();
+    for (const machineId of get(input.catalogValueAtom).entries.keys()) {
+      const presentation = get(presentationAtom(machineId));
       if (presentation !== null) {
-        next.set(environmentId, presentation);
+        next.set(machineId, presentation);
       }
     }
     if (mapsEqual(previous, next)) {
@@ -120,53 +120,53 @@ export function createEnvironmentPresentationAtoms<E>(input: {
     }
     previous = next;
     return previous;
-  }).pipe(Atom.withLabel("environment-presentations"));
+  }).pipe(Atom.withLabel("machine-presentations"));
 
-  // Enabled environments only, like the full server-configs map, but without providers, so
+  // Enabled machines only, like the full server-configs map, but without providers, so
   // capability checks on every sidebar row and markdown link skip provider status pushes.
   const serverConfigsAtom = Atom.make((get) => {
-    const next = new Map<EnvironmentId, EnvironmentServerConfig>();
-    for (const environmentId of enabledEnvironmentIds(get(input.catalogValueAtom))) {
-      const serverConfig = get(presentationAtom(environmentId))?.serverConfig;
+    const next = new Map<MachineId, EnvironmentServerConfig>();
+    for (const machineId of enabledMachineIds(get(input.catalogValueAtom))) {
+      const serverConfig = get(presentationAtom(machineId))?.serverConfig;
       if (serverConfig != null) {
-        next.set(environmentId, serverConfig);
+        next.set(machineId, serverConfig);
       }
     }
     const previous = Option.getOrNull(
-      get.self<ReadonlyMap<EnvironmentId, EnvironmentServerConfig>>(),
+      get.self<ReadonlyMap<MachineId, EnvironmentServerConfig>>(),
     );
     return previous !== null && mapsEqual(previous, next) ? previous : next;
-  }).pipe(Atom.withLabel("environment-server-configs-without-providers"));
+  }).pipe(Atom.withLabel("machine-server-configs-without-providers"));
 
   const providersByEnvironmentAtom = Atom.make((get) => {
-    const next = new Map<EnvironmentId, ReadonlyArray<ServerProvider>>();
-    for (const environmentId of get(input.catalogValueAtom).entries.keys()) {
-      const providers = get(input.serverConfigValueAtom(environmentId))?.providers;
+    const next = new Map<MachineId, ReadonlyArray<ServerProvider>>();
+    for (const machineId of get(input.catalogValueAtom).entries.keys()) {
+      const providers = get(input.serverConfigValueAtom(machineId))?.providers;
       if (providers !== undefined) {
-        next.set(environmentId, providers);
+        next.set(machineId, providers);
       }
     }
     const previous = Option.getOrNull(
-      get.self<ReadonlyMap<EnvironmentId, ReadonlyArray<ServerProvider>>>(),
+      get.self<ReadonlyMap<MachineId, ReadonlyArray<ServerProvider>>>(),
     );
     return previous !== null && mapsEqual(previous, next) ? previous : next;
-  }).pipe(Atom.withLabel("environment-providers"));
+  }).pipe(Atom.withLabel("machine-providers"));
 
-  // Enabled environments only, like serverConfigsAtom: a disabled connection keeps its cached
+  // Enabled machines only, like serverConfigsAtom: a disabled connection keeps its cached
   // config, and its accounts would otherwise count in usage limits. Usage limits ride on provider
   // statuses, so these surfaces rebuild on every push by design.
   const presentationsWithProvidersAtom = Atom.make((get) => {
     const previous = Option.getOrNull(
-      get.self<ReadonlyMap<EnvironmentId, EnvironmentPresentationWithProviders>>(),
+      get.self<ReadonlyMap<MachineId, EnvironmentPresentationWithProviders>>(),
     );
-    const next = new Map<EnvironmentId, EnvironmentPresentationWithProviders>();
-    for (const environmentId of enabledEnvironmentIds(get(input.catalogValueAtom))) {
-      const presentation = get(presentationAtom(environmentId));
+    const next = new Map<MachineId, EnvironmentPresentationWithProviders>();
+    for (const machineId of enabledMachineIds(get(input.catalogValueAtom))) {
+      const presentation = get(presentationAtom(machineId));
       if (presentation === null) continue;
-      const serverConfig = get(input.serverConfigValueAtom(environmentId));
-      const prior = previous?.get(environmentId);
+      const serverConfig = get(input.serverConfigValueAtom(machineId));
+      const prior = previous?.get(machineId);
       next.set(
-        environmentId,
+        machineId,
         prior !== undefined &&
           prior.entry === presentation.entry &&
           prior.connection === presentation.connection &&
@@ -176,7 +176,7 @@ export function createEnvironmentPresentationAtoms<E>(input: {
       );
     }
     return previous !== null && mapsEqual(previous, next) ? previous : next;
-  }).pipe(Atom.withLabel("environment-presentations-with-providers"));
+  }).pipe(Atom.withLabel("machine-presentations-with-providers"));
 
   return {
     presentationAtom,
@@ -188,7 +188,7 @@ export function createEnvironmentPresentationAtoms<E>(input: {
 }
 
 export interface EnvironmentConnectionSummary {
-  readonly environmentId: EnvironmentId;
+  readonly machineId: MachineId;
   readonly environmentLabel: string;
   readonly displayUrl: string;
   readonly isRelayManaged: boolean;
@@ -199,30 +199,30 @@ export interface EnvironmentConnectionSummary {
 }
 
 export function projectEnvironmentConnectionSummary(
-  environmentId: EnvironmentId,
-  environment: EnvironmentPresentation,
+  machineId: MachineId,
+  machine: EnvironmentPresentation,
 ): EnvironmentConnectionSummary {
   return {
-    environmentId,
-    environmentLabel: environment.entry.target.label,
-    displayUrl: connectionCatalogDisplayUrl(environment.entry) ?? "",
-    isRelayManaged: hasRelayRoute(environment.entry),
-    isEnabled: environment.entry.enabled,
-    connectionState: environment.connection.phase,
-    connectionError: environment.connection.error,
-    connectionErrorTraceId: environment.connection.traceId,
+    machineId,
+    environmentLabel: machine.entry.target.label,
+    displayUrl: connectionCatalogDisplayUrl(machine.entry) ?? "",
+    isRelayManaged: hasRelayRoute(machine.entry),
+    isEnabled: machine.entry.enabled,
+    connectionState: machine.connection.phase,
+    connectionError: machine.connection.error,
+    connectionErrorTraceId: machine.connection.traceId,
   };
 }
 
 export function createEnvironmentSummaryAtoms(input: {
   readonly catalogValueAtom: Atom.Atom<EnvironmentCatalogState>;
   readonly presentationAtom: (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   ) => Atom.Atom<EnvironmentPresentation | null>;
 }) {
-  const environmentIdsAtom = Atom.make((get) => {
+  const machineIdsAtom = Atom.make((get) => {
     const next = [...get(input.catalogValueAtom).entries.keys()];
-    const previous = Option.getOrNull(get.self<ReadonlyArray<EnvironmentId>>());
+    const previous = Option.getOrNull(get.self<ReadonlyArray<MachineId>>());
     return previous !== null &&
       previous.length === next.length &&
       next.every((id, index) => id === previous[index])
@@ -230,32 +230,32 @@ export function createEnvironmentSummaryAtoms(input: {
       : next;
   });
   const identitiesAtom = Atom.make((get) => {
-    const next = [...get(input.catalogValueAtom).entries].map(([environmentId, entry]) => ({
-      environmentId,
+    const next = [...get(input.catalogValueAtom).entries].map(([machineId, entry]) => ({
+      machineId,
       label: entry.target.label,
     }));
     const previous = Option.getOrNull(
-      get.self<ReadonlyArray<{ readonly environmentId: EnvironmentId; readonly label: string }>>(),
+      get.self<ReadonlyArray<{ readonly machineId: MachineId; readonly label: string }>>(),
     );
     return previous !== null &&
       previous.length === next.length &&
       next.every(
         (value, index) =>
-          value.environmentId === previous[index]?.environmentId &&
+          value.machineId === previous[index]?.machineId &&
           value.label === previous[index]?.label,
       )
       ? previous
       : next;
   });
-  const environmentAtom = Atom.family((environmentId: EnvironmentId) =>
+  const environmentAtom = Atom.family((machineId: MachineId) =>
     Atom.make((get) => {
-      const presentation = get(input.presentationAtom(environmentId));
+      const presentation = get(input.presentationAtom(machineId));
       if (presentation === null) return null;
-      const next = projectEnvironmentConnectionSummary(environmentId, presentation);
+      const next = projectEnvironmentConnectionSummary(machineId, presentation);
       const previous = Option.getOrNull(get.self<EnvironmentConnectionSummary | null>());
       if (
         previous !== null &&
-        previous.environmentId === next.environmentId &&
+        previous.machineId === next.machineId &&
         previous.environmentLabel === next.environmentLabel &&
         previous.displayUrl === next.displayUrl &&
         previous.isRelayManaged === next.isRelayManaged &&
@@ -270,9 +270,9 @@ export function createEnvironmentSummaryAtoms(input: {
   );
   const environmentsAtom = Atom.make((get) => {
     const next: Array<EnvironmentConnectionSummary> = [];
-    for (const environmentId of get(input.catalogValueAtom).entries.keys()) {
-      const environment = get(environmentAtom(environmentId));
-      if (environment !== null) next.push(environment);
+    for (const machineId of get(input.catalogValueAtom).entries.keys()) {
+      const machine = get(environmentAtom(machineId));
+      if (machine !== null) next.push(machine);
     }
     const previous = Option.getOrNull(get.self<ReadonlyArray<EnvironmentConnectionSummary>>());
     return previous !== null &&
@@ -280,12 +280,12 @@ export function createEnvironmentSummaryAtoms(input: {
       next.every((value, index) => value === previous[index])
       ? previous
       : next;
-  }).pipe(Atom.withLabel("environment-connection-summaries"));
-  const connectedEnvironmentIdsAtom = Atom.make((get) => {
-    const next = get(environmentIdsAtom).filter(
+  }).pipe(Atom.withLabel("machine-connection-summaries"));
+  const connectedMachineIdsAtom = Atom.make((get) => {
+    const next = get(machineIdsAtom).filter(
       (id) => get(environmentAtom(id))?.connectionState === "connected",
     );
-    const previous = Option.getOrNull(get.self<ReadonlyArray<EnvironmentId>>());
+    const previous = Option.getOrNull(get.self<ReadonlyArray<MachineId>>());
     return previous !== null &&
       previous.length === next.length &&
       next.every((id, index) => id === previous[index])
@@ -294,31 +294,31 @@ export function createEnvironmentSummaryAtoms(input: {
   });
   const machineByIdAtom = Atom.make((get) => {
     const next = new Map(
-      get(environmentIdsAtom).map(
-        (environmentId) =>
+      get(machineIdsAtom).map(
+        (machineId) =>
           [
-            environmentId,
-            resolveEnvironmentMachineKind(
-              get(input.presentationAtom(environmentId))?.serverConfig ?? null,
+            machineId,
+            resolveMachineKind(
+              get(input.presentationAtom(machineId))?.serverConfig ?? null,
             ),
           ] as const,
       ),
     );
     const previous = Option.getOrNull(
-      get.self<ReadonlyMap<EnvironmentId, EnvironmentMachineKind>>(),
+      get.self<ReadonlyMap<MachineId, MachineKind>>(),
     );
     return previous !== null && mapsEqual(previous, next) ? previous : next;
   });
   const pullRequestsSupportedAtom = Atom.make((get) =>
-    get(environmentIdsAtom).some(
-      (environmentId) =>
-        get(input.presentationAtom(environmentId))?.serverConfig?.environment.capabilities
+    get(machineIdsAtom).some(
+      (machineId) =>
+        get(input.presentationAtom(machineId))?.serverConfig?.machine.capabilities
           .pullRequests === true,
     ),
   );
   return {
-    environmentIdsAtom,
-    connectedEnvironmentIdsAtom,
+    machineIdsAtom,
+    connectedMachineIdsAtom,
     identitiesAtom,
     environmentsAtom,
     machineByIdAtom,

@@ -1,6 +1,6 @@
 import {
   ORCHESTRATION_V2_WS_METHODS,
-  type EnvironmentId as EnvironmentIdType,
+  type MachineId as MachineIdType,
   type OrchestrationV2ThreadDetailSnapshot,
   type OrchestrationV2ThreadProjection,
   type OrchestrationV2ThreadStreamItem,
@@ -21,7 +21,7 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import { HttpClient } from "effect/http";
 import { Atom } from "effect/reactivity";
 
-import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
+import * as RemoteMachineAuthorization from "../authorization/service.ts";
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import { connectionProjectionPhase } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
@@ -174,20 +174,20 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
   const httpClient = yield* Effect.serviceOption(HttpClient.HttpClient);
   const dpopSigner = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);
   const remoteAuthorization = yield* Effect.serviceOption(
-    RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization,
+    RemoteMachineAuthorization.RemoteMachineAuthorization,
   );
   const wakeups = yield* Effect.serviceOption(ConnectionWakeups.ConnectionWakeups);
-  const environmentId = supervisor.target.environmentId;
+  const machineId = supervisor.target.machineId;
   const retained = resumeCache?.snapshot;
   const owner = {};
   if (resumeCache) resumeCache.owner = owner;
   const cached =
     retained === undefined
-      ? yield* cache.loadThread(environmentId, threadId).pipe(
+      ? yield* cache.loadThread(machineId, threadId).pipe(
           Effect.catch((error) =>
             Effect.logWarning("Could not load cached thread.").pipe(
               Effect.annotateLogs({
-                environmentId,
+                machineId,
                 threadId,
                 error: error.message,
               }),
@@ -258,7 +258,7 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
       )
     )
       return;
-    yield* cache.saveThread(environmentId, snapshot).pipe(
+    yield* cache.saveThread(machineId, snapshot).pipe(
       Effect.tap(() =>
         Effect.sync(() => {
           if (
@@ -277,7 +277,7 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
       Effect.catch((error) =>
         Effect.logWarning("Could not persist the thread cache.").pipe(
           Effect.annotateLogs({
-            environmentId,
+            machineId,
             threadId,
             error: error.message,
           }),
@@ -408,11 +408,11 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
     });
     yield* remember;
     if (resumeCache !== undefined && resumeCache.owner !== owner) return;
-    yield* cache.removeThread(environmentId, threadId).pipe(
+    yield* cache.removeThread(machineId, threadId).pipe(
       Effect.catch((error) =>
         Effect.logWarning("Could not remove the cached thread.").pipe(
           Effect.annotateLogs({
-            environmentId,
+            machineId,
             threadId,
             error: error.message,
           }),
@@ -441,7 +441,7 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
       }
       yield* Effect.logDebug("Skipped a thread event type this client does not know.").pipe(
         Effect.annotateLogs({
-          environmentId,
+          machineId,
           threadId,
           eventType: item.eventType.slice(0, 64),
           sequence: item.sequence,
@@ -659,7 +659,7 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
     const runLoad = Effect.gen(function* () {
       const preparedOption = yield* SubscriptionRef.get(supervisor.prepared);
       if (Option.isNone(preparedOption) || Option.isNone(httpClient))
-        return yield* failLoad("Environment is not connected.");
+        return yield* failLoad("Machine is not connected.");
 
       const views =
         throughEntryId === undefined ? [undefined] : ["conversation" as const, undefined];
@@ -723,7 +723,7 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
 
   if (Option.isSome(historyController)) {
     const scope = yield* Scope.Scope;
-    const registration = yield* historyController.value.register(environmentId, threadId, {
+    const registration = yield* historyController.value.register(machineId, threadId, {
       loadEarlier: (throughEntryId) =>
         loadEarlier(throughEntryId).pipe(Effect.forkIn(scope), Effect.flatMap(Fiber.join)),
     });
@@ -873,12 +873,12 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
 });
 
 function threadStateChanges(
-  environmentId: EnvironmentIdType,
+  machineId: MachineIdType,
   threadId: ThreadIdType,
   resumeCache?: ThreadResumeCache,
 ) {
   return followStreamInEnvironment(
-    environmentId,
+    machineId,
     Stream.unwrap(
       makeEnvironmentThreadState(threadId, resumeCache).pipe(Effect.map(SubscriptionRef.changes)),
     ),
@@ -895,25 +895,25 @@ export function createEnvironmentThreadStateAtoms<R, E>(
   >,
 ) {
   // Cache definitions must outlive collectible live-atom definitions. The
-  // registry retains these nodes without retaining environment or RPC scopes.
+  // registry retains these nodes without retaining machine or RPC scopes.
   const resumeFamily = Atom.family((key: string) =>
     Atom.make((): ThreadResumeCache => ({
       snapshot: undefined,
       owner: undefined,
     })).pipe(
       Atom.setIdleTTL(THREAD_SNAPSHOT_IDLE_TTL_MS),
-      Atom.withLabel(`environment-thread-resume:${key}`),
+      Atom.withLabel(`machine-thread-resume:${key}`),
     ),
   );
   const family = Atom.family((key: string) => {
-    const { environmentId, threadId } = parseThreadKey(key);
+    const { machineId, threadId } = parseThreadKey(key);
     const resumeAtom = resumeFamily(key);
     return runtime
       .atom(
         (get) => {
           get.mount(resumeAtom);
           const resume = get.once(resumeAtom);
-          const live = threadStateChanges(environmentId, threadId, resume);
+          const live = threadStateChanges(machineId, threadId, resume);
           return resume.snapshot === undefined
             ? live
             : Stream.concat(Stream.succeed(cachedThreadState(resume.snapshot.state)), live);
@@ -922,12 +922,12 @@ export function createEnvironmentThreadStateAtoms<R, E>(
           initialValue: EMPTY_ENVIRONMENT_THREAD_STATE,
         },
       )
-      .pipe(Atom.setIdleTTL(0), Atom.withLabel(`environment-thread-state:${key}`));
+      .pipe(Atom.setIdleTTL(0), Atom.withLabel(`machine-thread-state:${key}`));
   });
 
   return {
-    stateAtom: (environmentId: EnvironmentIdType, threadId: ThreadIdType) =>
-      family(threadKey({ environmentId, threadId })),
+    stateAtom: (machineId: MachineIdType, threadId: ThreadIdType) =>
+      family(threadKey({ machineId, threadId })),
   };
 }
 

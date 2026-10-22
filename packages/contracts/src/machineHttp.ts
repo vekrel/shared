@@ -32,17 +32,17 @@ import {
   AuthPairingLink,
   AuthRevokeClientSessionInput,
   AuthRevokePairingLinkInput,
-  AuthEnvironmentScope,
+  AuthMachineScope,
   AuthTokenExchangeRequest,
   AuthSessionState,
   AuthWebSocketTicketResult,
   ServerAuthSessionMethod,
 } from "./auth.ts";
 import {
-  ExecutionEnvironmentDescriptor,
+  ExecutionMachineDescriptor,
   ORCHESTRATION_PROTOCOL_HEADER,
   ORCHESTRATION_PROTOCOL_VERSION_TEXT,
-} from "./environment.ts";
+} from "./machine.ts";
 import {
   DpopFailureReason,
   AuthSessionId,
@@ -64,12 +64,12 @@ import {
   PullRequestUnavailableError,
 } from "./pullRequest.ts";
 import {
-  RelayCloudEnvironmentHealthRequest,
+  RelayCloudMachineHealthRequest,
   RelayCloudMintCredentialRequest,
-  RelayEnvironmentConfigRequest,
-  RelayEnvironmentHealthResponse,
-  RelayEnvironmentLinkProof,
-  RelayEnvironmentMintResponse,
+  RelayMachineConfigRequest,
+  RelayMachineHealthResponse,
+  RelayMachineLinkProof,
+  RelayMachineMintResponse,
   RelayLinkProofRequest,
 } from "./relay.ts";
 
@@ -97,11 +97,11 @@ export const EnvironmentRequestInvalidReason = Schema.Literals([
 ]);
 export type EnvironmentRequestInvalidReason = typeof EnvironmentRequestInvalidReason.Type;
 
-export const EnvironmentAuthInvalidReason = Schema.Literals([
+export const MachineAuthInvalidReason = Schema.Literals([
   "missing_credential",
   "invalid_credential",
 ]);
-export type EnvironmentAuthInvalidReason = typeof EnvironmentAuthInvalidReason.Type;
+export type MachineAuthInvalidReason = typeof MachineAuthInvalidReason.Type;
 
 export const EnvironmentOperationForbiddenReason = Schema.Literals([
   "current_session_revoke_not_allowed",
@@ -143,26 +143,26 @@ export class EnvironmentRequestInvalidError extends Schema.TaggedError<Environme
   }
 
   override get message(): string {
-    return `The environment rejected the request (${this.reason}).`;
+    return `The machine rejected the request (${this.reason}).`;
   }
 }
 
-export class EnvironmentAuthInvalidError extends Schema.TaggedError<EnvironmentAuthInvalidError>()(
-  "EnvironmentAuthInvalidError",
+export class MachineAuthInvalidError extends Schema.TaggedError<MachineAuthInvalidError>()(
+  "MachineAuthInvalidError",
   {
     code: Schema.Literal("auth_invalid"),
-    reason: EnvironmentAuthInvalidReason,
+    reason: MachineAuthInvalidReason,
     dpopFailureReason: Schema.optionalKey(DpopFailureReason),
     traceId: TrimmedNonEmptyString,
   },
   { httpApiStatus: 401 },
 ) {
   [HttpServerRespondable.symbol]() {
-    return HttpServerResponse.schemaJson(EnvironmentAuthInvalidError)(this, { status: 401 });
+    return HttpServerResponse.schemaJson(MachineAuthInvalidError)(this, { status: 401 });
   }
 
   override get message(): string {
-    return `The environment rejected this client's credentials (${this.reason}).`;
+    return `The machine rejected this client's credentials (${this.reason}).`;
   }
 }
 
@@ -170,7 +170,7 @@ export class EnvironmentScopeRequiredError extends Schema.TaggedError<Environmen
   "EnvironmentScopeRequiredError",
   {
     code: Schema.Literal("insufficient_scope"),
-    requiredScope: AuthEnvironmentScope,
+    requiredScope: AuthMachineScope,
     requiredPermission: Schema.optionalKey(Schema.String),
     traceId: TrimmedNonEmptyString,
   },
@@ -199,7 +199,7 @@ export class EnvironmentOperationForbiddenError extends Schema.TaggedError<Envir
   }
 
   override get message(): string {
-    return `The environment refused this operation (${this.reason}).`;
+    return `The machine refused this operation (${this.reason}).`;
   }
 }
 
@@ -217,7 +217,7 @@ export class EnvironmentInternalError extends Schema.TaggedError<EnvironmentInte
   }
 
   override get message(): string {
-    return `The environment failed to answer this request (${this.reason}).`;
+    return `The machine failed to answer this request (${this.reason}).`;
   }
 }
 
@@ -238,82 +238,82 @@ export class EnvironmentResourceNotFoundError extends Schema.TaggedError<Environ
   }
 
   override get message(): string {
-    return `The environment could not find what this request named (${this.reason}).`;
+    return `The machine could not find what this request named (${this.reason}).`;
   }
 }
 
-export const EnvironmentHttpCommonError = Schema.Union([
+export const MachineHttpCommonError = Schema.Union([
   EnvironmentRequestInvalidError,
-  EnvironmentAuthInvalidError,
+  MachineAuthInvalidError,
   EnvironmentScopeRequiredError,
   EnvironmentOperationForbiddenError,
   EnvironmentResourceNotFoundError,
   EnvironmentInternalError,
 ]);
-export type EnvironmentHttpCommonError = typeof EnvironmentHttpCommonError.Type;
+export type MachineHttpCommonError = typeof MachineHttpCommonError.Type;
 
-const EnvironmentAuthenticationErrors = [
-  EnvironmentAuthInvalidError,
+const MachineAuthenticationErrors = [
+  MachineAuthInvalidError,
   EnvironmentInternalError,
 ] as const;
 
-export class EnvironmentHttpBadRequestError extends Schema.TaggedError<EnvironmentHttpBadRequestError>()(
-  "EnvironmentHttpBadRequestError",
+export class MachineHttpBadRequestError extends Schema.TaggedError<MachineHttpBadRequestError>()(
+  "MachineHttpBadRequestError",
   {
     message: Schema.String,
   },
   { httpApiStatus: 400 },
 ) {
   [HttpServerRespondable.symbol]() {
-    return HttpServerResponse.schemaJson(EnvironmentHttpBadRequestError)(this, { status: 400 });
+    return HttpServerResponse.schemaJson(MachineHttpBadRequestError)(this, { status: 400 });
   }
 }
 
-export class EnvironmentHttpUnauthorizedError extends Schema.TaggedError<EnvironmentHttpUnauthorizedError>()(
-  "EnvironmentHttpUnauthorizedError",
+export class MachineHttpUnauthorizedError extends Schema.TaggedError<MachineHttpUnauthorizedError>()(
+  "MachineHttpUnauthorizedError",
   {
     message: Schema.String,
   },
   { httpApiStatus: 401 },
 ) {
   [HttpServerRespondable.symbol]() {
-    return HttpServerResponse.schemaJson(EnvironmentHttpUnauthorizedError)(this, { status: 401 });
+    return HttpServerResponse.schemaJson(MachineHttpUnauthorizedError)(this, { status: 401 });
   }
 }
 
-export class EnvironmentHttpForbiddenError extends Schema.TaggedError<EnvironmentHttpForbiddenError>()(
-  "EnvironmentHttpForbiddenError",
+export class MachineHttpForbiddenError extends Schema.TaggedError<MachineHttpForbiddenError>()(
+  "MachineHttpForbiddenError",
   {
     message: Schema.String,
   },
   { httpApiStatus: 403 },
 ) {
   [HttpServerRespondable.symbol]() {
-    return HttpServerResponse.schemaJson(EnvironmentHttpForbiddenError)(this, { status: 403 });
+    return HttpServerResponse.schemaJson(MachineHttpForbiddenError)(this, { status: 403 });
   }
 }
 
-export class EnvironmentHttpInternalServerError extends Schema.TaggedError<EnvironmentHttpInternalServerError>()(
-  "EnvironmentHttpInternalServerError",
+export class MachineHttpInternalServerError extends Schema.TaggedError<MachineHttpInternalServerError>()(
+  "MachineHttpInternalServerError",
   {
     message: Schema.String,
   },
   { httpApiStatus: 500 },
 ) {
   [HttpServerRespondable.symbol]() {
-    return HttpServerResponse.schemaJson(EnvironmentHttpInternalServerError)(this, { status: 500 });
+    return HttpServerResponse.schemaJson(MachineHttpInternalServerError)(this, { status: 500 });
   }
 }
 
-export class EnvironmentHttpConflictError extends Schema.TaggedError<EnvironmentHttpConflictError>()(
-  "EnvironmentHttpConflictError",
+export class MachineHttpConflictError extends Schema.TaggedError<MachineHttpConflictError>()(
+  "MachineHttpConflictError",
   {
     message: Schema.String,
   },
   { httpApiStatus: 409 },
 ) {
   [HttpServerRespondable.symbol]() {
-    return HttpServerResponse.schemaJson(EnvironmentHttpConflictError)(this, { status: 409 });
+    return HttpServerResponse.schemaJson(MachineHttpConflictError)(this, { status: 409 });
   }
 }
 
@@ -332,12 +332,12 @@ export class EnvironmentCloudEndpointUnavailableError extends Schema.TaggedError
   }
 }
 const EnvironmentSessionCreationErrors = [
-  EnvironmentAuthInvalidError,
+  MachineAuthInvalidError,
   EnvironmentInternalError,
 ] as const;
 const EnvironmentTokenExchangeErrors = [
   EnvironmentRequestInvalidError,
-  EnvironmentAuthInvalidError,
+  MachineAuthInvalidError,
   EnvironmentInternalError,
 ] as const;
 const EnvironmentScopedOperationErrors = [
@@ -376,29 +376,29 @@ export interface EnvironmentSessionPrincipalShape {
   readonly sessionId: AuthSessionId;
   readonly subject: string;
   readonly method: ServerAuthSessionMethod;
-  readonly scopes: ReadonlySet<AuthEnvironmentScope>;
+  readonly scopes: ReadonlySet<AuthMachineScope>;
   readonly proofKeyThumbprint?: string;
   readonly expiresAt?: DateTime.DateTime;
 }
 
-export class EnvironmentAuthenticatedPrincipal extends Context.Service<
-  EnvironmentAuthenticatedPrincipal,
+export class MachineAuthenticatedPrincipal extends Context.Service<
+  MachineAuthenticatedPrincipal,
   EnvironmentSessionPrincipalShape
->()("@vekrel/contracts/environmentHttp/EnvironmentAuthenticatedPrincipal") {}
+>()("@vekrel/contracts/machineHttp/MachineAuthenticatedPrincipal") {}
 
-export class EnvironmentAuthenticatedAuth extends HttpApiMiddleware.Service<
-  EnvironmentAuthenticatedAuth,
-  { provides: EnvironmentAuthenticatedPrincipal }
->()("EnvironmentAuthenticatedAuth", {
-  error: EnvironmentAuthenticationErrors,
+export class MachineAuthenticatedAuth extends HttpApiMiddleware.Service<
+  MachineAuthenticatedAuth,
+  { provides: MachineAuthenticatedPrincipal }
+>()("MachineAuthenticatedAuth", {
+  error: MachineAuthenticationErrors,
 }) {}
 
-const EnvironmentHttpCloudErrors = [
-  EnvironmentHttpBadRequestError,
-  EnvironmentHttpUnauthorizedError,
-  EnvironmentHttpForbiddenError,
-  EnvironmentHttpConflictError,
-  EnvironmentHttpInternalServerError,
+const MachineHttpCloudErrors = [
+  MachineHttpBadRequestError,
+  MachineHttpUnauthorizedError,
+  MachineHttpForbiddenError,
+  MachineHttpConflictError,
+  MachineHttpInternalServerError,
   EnvironmentScopeRequiredError,
 ] as const;
 
@@ -421,7 +421,7 @@ export const EnvironmentConnectReachabilityCause = Schema.Literals([
 ]);
 export type EnvironmentConnectReachabilityCause = typeof EnvironmentConnectReachabilityCause.Type;
 
-/** Whether other devices can reach this environment through its T3 Connect tunnel. */
+/** Whether other devices can reach this machine through its T3 Connect tunnel. */
 export const EnvironmentConnectReachability = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("reachable"),
@@ -527,12 +527,12 @@ export const AuthOtherClientSessionsRevokeResult = Schema.Struct({
 export type AuthOtherClientSessionsRevokeResult = typeof AuthOtherClientSessionsRevokeResult.Type;
 
 class EnvironmentMetadataHttpApi extends HttpApiGroup.make("metadata").add(
-  HttpApiEndpoint.get("descriptor", "/.well-known/t3/environment", {
-    success: ExecutionEnvironmentDescriptor,
+  HttpApiEndpoint.get("descriptor", "/.well-known/vekrel/machine", {
+    success: ExecutionMachineDescriptor,
   }),
 ) {}
 
-class EnvironmentAuthHttpApi extends HttpApiGroup.make("auth")
+class MachineAuthHttpApi extends HttpApiGroup.make("auth")
   .add(
     HttpApiEndpoint.get("session", "/api/auth/session", {
       headers: OptionalBearerHeaders,
@@ -560,7 +560,7 @@ class EnvironmentAuthHttpApi extends HttpApiGroup.make("auth")
       headers: OptionalBearerHeaders,
       success: AuthWebSocketTicketResult,
       error: [EnvironmentInternalError],
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.post("pairingCredential", "/api/auth/pairing-token", {
@@ -568,14 +568,14 @@ class EnvironmentAuthHttpApi extends HttpApiGroup.make("auth")
       payload: AuthCreatePairingCredentialInput,
       success: AuthPairingCredentialResult,
       error: EnvironmentPairingCredentialErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.get("pairingLinks", "/api/auth/pairing-links", {
       headers: OptionalBearerHeaders,
       success: Schema.Array(AuthPairingLink),
       error: EnvironmentScopedOperationErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.post("revokePairingLink", "/api/auth/pairing-links/revoke", {
@@ -583,14 +583,14 @@ class EnvironmentAuthHttpApi extends HttpApiGroup.make("auth")
       payload: AuthRevokePairingLinkInput,
       success: AuthPairingLinkRevokeResult,
       error: EnvironmentScopedOperationErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.get("clients", "/api/auth/clients", {
       headers: OptionalBearerHeaders,
       success: Schema.Array(AuthClientSession),
       error: EnvironmentScopedOperationErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.post("revokeClient", "/api/auth/clients/revoke", {
@@ -598,14 +598,14 @@ class EnvironmentAuthHttpApi extends HttpApiGroup.make("auth")
       payload: AuthRevokeClientSessionInput,
       success: AuthClientSessionRevokeResult,
       error: EnvironmentSessionRevokeErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.post("revokeOtherClients", "/api/auth/clients/revoke-others", {
       headers: OptionalBearerHeaders,
       success: AuthOtherClientSessionsRevokeResult,
       error: EnvironmentScopedOperationErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   ) {}
 
 class EnvironmentMcpOAuthHttpApi extends HttpApiGroup.make("mcpOAuth")
@@ -681,7 +681,7 @@ class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestration")
       headers: OrchestrationProtocolHeaders,
       success: OrchestrationV2ShellSnapshot,
       error: EnvironmentOrchestrationSnapshotErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.get("threadSnapshot", "/api/orchestration/threads/:threadId", {
@@ -689,7 +689,7 @@ class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestration")
       params: EnvironmentOrchestrationThreadSnapshotParams,
       success: OrchestrationV2ThreadDetailSnapshot,
       error: EnvironmentOrchestrationThreadSnapshotErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.get("threadTranscript", "/api/orchestration/threads/:threadId/transcript", {
@@ -697,7 +697,7 @@ class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestration")
       params: EnvironmentOrchestrationThreadSnapshotParams,
       success: OrchestrationV2ThreadTranscript,
       error: [EnvironmentRequestInvalidError, ...EnvironmentOrchestrationThreadSnapshotErrors],
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.get("threadBoundedSnapshot", "/api/orchestration/threads/:threadId/bounded", {
@@ -706,7 +706,7 @@ class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestration")
       query: EnvironmentOrchestrationThreadBoundedSnapshotQuery,
       success: OrchestrationV2ThreadBoundedSnapshot,
       error: EnvironmentOrchestrationThreadSnapshotErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.get("threadHistoryPage", "/api/orchestration/threads/:threadId/history", {
@@ -715,7 +715,7 @@ class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestration")
       query: EnvironmentOrchestrationThreadHistoryQuery,
       success: OrchestrationV2ThreadHistoryPage,
       error: EnvironmentOrchestrationThreadHistoryErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   ) {}
 
 class EnvironmentProjectsHttpApi extends HttpApiGroup.make("projects")
@@ -724,7 +724,7 @@ class EnvironmentProjectsHttpApi extends HttpApiGroup.make("projects")
       headers: OptionalBearerHeaders,
       success: ProjectSnapshot,
       error: EnvironmentProjectSnapshotErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.post("mutate", "/api/projects/mutate", {
@@ -732,7 +732,7 @@ class EnvironmentProjectsHttpApi extends HttpApiGroup.make("projects")
       payload: ProjectMutation,
       success: Project,
       error: EnvironmentProjectMutationErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+    }).middleware(MachineAuthenticatedAuth),
   ) {}
 
 class EnvironmentPullRequestsHttpApi extends HttpApiGroup.make("pullRequests").add(
@@ -743,11 +743,11 @@ class EnvironmentPullRequestsHttpApi extends HttpApiGroup.make("pullRequests").a
     error: [
       PullRequestUnavailableError,
       PullRequestOperationError,
-      EnvironmentAuthInvalidError,
+      MachineAuthInvalidError,
       EnvironmentScopeRequiredError,
       EnvironmentInternalError,
     ],
-  }).middleware(EnvironmentAuthenticatedAuth),
+  }).middleware(MachineAuthenticatedAuth),
 ) {}
 
 class EnvironmentConnectHttpApi extends HttpApiGroup.make("connect")
@@ -755,66 +755,66 @@ class EnvironmentConnectHttpApi extends HttpApiGroup.make("connect")
     HttpApiEndpoint.post("linkProof", "/api/connect/link-proof", {
       headers: OptionalBearerHeaders,
       payload: RelayLinkProofRequest,
-      success: RelayEnvironmentLinkProof,
-      error: EnvironmentHttpCloudErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+      success: RelayMachineLinkProof,
+      error: MachineHttpCloudErrors,
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.post("relayConfig", "/api/connect/relay-config", {
       headers: OptionalBearerHeaders,
-      payload: RelayEnvironmentConfigRequest,
+      payload: RelayMachineConfigRequest,
       success: EnvironmentCloudRelayConfigResult,
-      error: [...EnvironmentHttpCloudErrors, EnvironmentCloudEndpointUnavailableError],
-    }).middleware(EnvironmentAuthenticatedAuth),
+      error: [...MachineHttpCloudErrors, EnvironmentCloudEndpointUnavailableError],
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.get("linkState", "/api/connect/link-state", {
       headers: OptionalBearerHeaders,
       success: EnvironmentCloudLinkStateResult,
-      error: EnvironmentHttpCloudErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+      error: MachineHttpCloudErrors,
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.post("checkReachability", "/api/connect/reachability", {
       headers: OptionalBearerHeaders,
       success: EnvironmentConnectReachability,
-      error: EnvironmentHttpCloudErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+      error: MachineHttpCloudErrors,
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.post("unlink", "/api/connect/unlink", {
       headers: OptionalBearerHeaders,
       success: EnvironmentCloudRelayConfigResult,
-      error: EnvironmentHttpCloudErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+      error: MachineHttpCloudErrors,
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.post("preferences", "/api/connect/preferences", {
       headers: OptionalBearerHeaders,
       payload: EnvironmentCloudPreferencesRequest,
       success: EnvironmentCloudLinkStateResult,
-      error: EnvironmentHttpCloudErrors,
-    }).middleware(EnvironmentAuthenticatedAuth),
+      error: MachineHttpCloudErrors,
+    }).middleware(MachineAuthenticatedAuth),
   )
   .add(
     HttpApiEndpoint.post("health", "/api/t3-connect/health", {
-      payload: RelayCloudEnvironmentHealthRequest,
-      success: RelayEnvironmentHealthResponse,
-      error: EnvironmentHttpCloudErrors,
+      payload: RelayCloudMachineHealthRequest,
+      success: RelayMachineHealthResponse,
+      error: MachineHttpCloudErrors,
     }),
   )
   .add(
     HttpApiEndpoint.post("mintCredential", "/api/connect/mint-credential", {
       payload: RelayCloudMintCredentialRequest,
-      success: RelayEnvironmentMintResponse,
-      error: EnvironmentHttpCloudErrors,
+      success: RelayMachineMintResponse,
+      error: MachineHttpCloudErrors,
     }),
   )
   .add(
     HttpApiEndpoint.post("t3MintCredential", "/api/t3-connect/mint-credential", {
       payload: RelayCloudMintCredentialRequest,
-      success: RelayEnvironmentMintResponse,
-      error: EnvironmentHttpCloudErrors,
+      success: RelayMachineMintResponse,
+      error: MachineHttpCloudErrors,
     }),
   ) {}
 
@@ -842,9 +842,9 @@ class EnvironmentWebhooksHttpApi extends HttpApiGroup.make("webhooks")
   .add(HttpApiEndpoint.patch("webhookPatch", WEBHOOK_PATH, webhookEndpoint))
   .add(HttpApiEndpoint.get("webhookGet", WEBHOOK_PATH, webhookEndpoint)) {}
 
-export class EnvironmentHttpApi extends HttpApi.make("environment")
+export class MachineHttpApi extends HttpApi.make("machine")
   .add(EnvironmentMetadataHttpApi)
-  .add(EnvironmentAuthHttpApi)
+  .add(MachineAuthHttpApi)
   .add(EnvironmentMcpOAuthHttpApi)
   .add(EnvironmentOrchestrationHttpApi)
   .add(EnvironmentPullRequestsHttpApi)

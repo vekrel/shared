@@ -30,7 +30,7 @@ export function isThreadWorking(thread: WorkingThreadInput): boolean {
 
 type InboxThreadInput = Pick<
   EnvironmentThreadShell,
-  "id" | "environmentId" | "createdAt" | "unsettledAt" | "latestRun"
+  "id" | "machineId" | "createdAt" | "unsettledAt" | "latestRun"
 >;
 
 export function sortInboxThreadsByReturn<T extends InboxThreadInput>(
@@ -54,7 +54,7 @@ export function sortInboxThreadsByReturn<T extends InboxThreadInput>(
 
 type WorkingSortInput = Pick<
   EnvironmentThreadShell,
-  "id" | "environmentId" | "createdAt" | "latestRun" | "latestUserAuthoredMessageAt"
+  "id" | "machineId" | "createdAt" | "latestRun" | "latestUserAuthoredMessageAt"
 >;
 
 export function sortWorkingThreadsBySend<T extends WorkingSortInput>(threads: readonly T[]): T[] {
@@ -74,7 +74,7 @@ export function sortWorkingThreadsBySend<T extends WorkingSortInput>(threads: re
   return sortNewestFirst(threads, timestamps);
 }
 
-function sortNewestFirst<T extends Pick<EnvironmentThreadShell, "id" | "environmentId">>(
+function sortNewestFirst<T extends Pick<EnvironmentThreadShell, "id" | "machineId">>(
   threads: readonly T[],
   timestamps: ReadonlyMap<T, number>,
 ): T[] {
@@ -82,7 +82,7 @@ function sortNewestFirst<T extends Pick<EnvironmentThreadShell, "id" | "environm
     (left, right) =>
       timestamps.get(right)! - timestamps.get(left)! ||
       left.id.localeCompare(right.id) ||
-      left.environmentId.localeCompare(right.environmentId),
+      left.machineId.localeCompare(right.machineId),
   );
 }
 
@@ -92,8 +92,8 @@ function sortNewestFirst<T extends Pick<EnvironmentThreadShell, "id" | "environm
  * null to reset while the beta is off.
  */
 export function createInboxReturnTracker() {
-  const keyOf = (thread: Pick<EnvironmentThreadShell, "environmentId" | "id">) =>
-    `${thread.environmentId}:${thread.id}`;
+  const keyOf = (thread: Pick<EnvironmentThreadShell, "machineId" | "id">) =>
+    `${thread.machineId}:${thread.id}`;
   let lastWorkingKeys: ReadonlySet<string> | null = null;
   const returns = new Map<string, number>();
   return {
@@ -120,7 +120,7 @@ export function createInboxReturnTracker() {
       }
       lastWorkingKeys = working;
     },
-    returnedAt: (thread: Pick<EnvironmentThreadShell, "environmentId" | "id">) =>
+    returnedAt: (thread: Pick<EnvironmentThreadShell, "machineId" | "id">) =>
       returns.get(keyOf(thread)),
   };
 }

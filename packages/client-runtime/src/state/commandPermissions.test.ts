@@ -13,7 +13,7 @@ import {
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
   ThreadId,
-  EnvironmentId,
+  MachineId,
   ScheduledTaskId,
   WS_METHODS,
   type AuthSessionState,
@@ -30,11 +30,11 @@ import { createEnvironmentRpcCommand } from "./runtime.ts";
 vi.mock("./session.ts", () => ({
   createEnvironmentSessionAtoms: () => ({ sessionStateAtom: sessions }),
 }));
-const sessions = Atom.family((_id: EnvironmentId) =>
+const sessions = Atom.family((_id: MachineId) =>
   Atom.make<AsyncResult.AsyncResult<AuthSessionState, string>>(AsyncResult.initial()),
 );
-const env = EnvironmentId.make("target");
-const other = EnvironmentId.make("other");
+const env = MachineId.make("target");
+const other = MachineId.make("other");
 const grant = (allowed: boolean): AuthSessionState => ({
   authenticated: true,
   auth: {
@@ -48,7 +48,7 @@ const grant = (allowed: boolean): AuthSessionState => ({
 });
 const runtime = Atom.runtime(
   Layer.succeed(EnvironmentRegistry, {
-    run: (_id: EnvironmentId, effect: Effect.Effect<unknown>) => effect,
+    run: (_id: MachineId, effect: Effect.Effect<unknown>) => effect,
   } as unknown as EnvironmentRegistry["Service"]),
 );
 const permissions = createCommandPermissions(runtime, WS_METHODS.scheduledTasksDelete);
@@ -68,7 +68,7 @@ describe("command permissions", () => {
         registry.set(sessions(env), AsyncResult.success(grant(true)));
         expect(registry.get(close.permissionAtom(env))).toBe(false);
         expect((yield* close.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
-          "EnvironmentAuthorizationError",
+          "MachineAuthorizationError",
         );
         registry.set(
           sessions(env),
@@ -83,7 +83,7 @@ describe("command permissions", () => {
         registry.set(sessions(other), AsyncResult.success(grant(false)));
         expect(registry.get(close.permissionAtom(other))).toBe(false);
         expect((yield* close.authorize(registry, other).pipe(Effect.flip))._tag).toBe(
-          "EnvironmentAuthorizationError",
+          "MachineAuthorizationError",
         );
       }),
     ),
@@ -97,7 +97,7 @@ describe("command permissions", () => {
         registry.set(sessions(env), AsyncResult.success(grant(true)));
         expect(registry.get(cleanup.permissionAtom(env))).toBe(false);
         expect((yield* cleanup.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
-          "EnvironmentAuthorizationError",
+          "MachineAuthorizationError",
         );
         registry.set(
           sessions(env),
@@ -126,7 +126,7 @@ describe("command permissions", () => {
         registry.set(sessions(other), AsyncResult.success(grant(false)));
         expect(registry.get(permissions.permissionAtom(other))).toBe(false);
         const denied = yield* permissions.authorize(registry, other).pipe(Effect.flip);
-        expect(denied._tag).toBe("EnvironmentAuthorizationError");
+        expect(denied._tag).toBe("MachineAuthorizationError");
       }),
     ),
   );
@@ -149,14 +149,14 @@ describe("command permissions", () => {
           const registry = yield* setup;
           registry.set(sessions(env), AsyncResult.failure(Cause.fail("offline")));
           expect((yield* permissions.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
-            "EnvironmentAuthorizationError",
+            "MachineAuthorizationError",
           );
           registry.set(
             sessions(env),
             AsyncResult.success({ ...grant(true), authenticated: false }),
           );
           expect((yield* permissions.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
-            "EnvironmentAuthorizationError",
+            "MachineAuthorizationError",
           );
           registry.set(sessions(env), AsyncResult.waiting(AsyncResult.success(grant(true))));
           yield* permissions.authorize(registry, env);
@@ -188,7 +188,7 @@ describe("command permissions", () => {
           return { id: ScheduledTaskId.make("task") };
         }),
     });
-    const target = { environmentId: env, input: { id: ScheduledTaskId.make("task") } };
+    const target = { machineId: env, input: { id: ScheduledTaskId.make("task") } };
     try {
       const first = command.run(registry, target);
       await entered;
@@ -330,19 +330,19 @@ it.effect("rejects protected unary and streamed RPCs outside a guarded command",
       },
     } as unknown as RpcSession;
     const supervisor = {
-      target: { environmentId: env, label: "target" },
+      target: { machineId: env, label: "target" },
       session: yield* SubscriptionRef.make(Option.some(session)),
     } as unknown as EnvironmentSupervisor["Service"];
     const unary = yield* requestGuarded(WS_METHODS.scheduledTasksDelete, {
       id: ScheduledTaskId.make("task"),
     }).pipe(Effect.provideService(EnvironmentSupervisor, supervisor), Effect.flip);
-    expect(unary._tag).toBe("EnvironmentAuthorizationError");
+    expect(unary._tag).toBe("MachineAuthorizationError");
     const streamed = yield* runStreamGuarded(WS_METHODS.gitRunStackedAction, {
       actionId: "test-action",
       cwd: "/repo",
       action: "commit",
     }).pipe(Stream.runDrain, Effect.provideService(EnvironmentSupervisor, supervisor), Effect.flip);
-    expect(streamed._tag).toBe("EnvironmentAuthorizationError");
+    expect(streamed._tag).toBe("MachineAuthorizationError");
     expect(writes).toBe(0);
   }),
 );

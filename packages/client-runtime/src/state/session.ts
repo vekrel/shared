@@ -1,4 +1,4 @@
-import type { AuthSessionState, EnvironmentId, ServerConfig } from "@vekrel/contracts";
+import type { AuthSessionState, MachineId, ServerConfig } from "@vekrel/contracts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -7,14 +7,14 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import { HttpClient } from "effect/http";
 import { AsyncResult, Atom } from "effect/reactivity";
 
-import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
+import * as RemoteMachineAuthorization from "../authorization/service.ts";
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import type { PreparedConnection } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
-import { executeAuthenticatedEnvironmentHttpRequest } from "./environmentHttpAuth.ts";
-import { followStreamInEnvironment } from "./environmentStreams.ts";
+import { executeAuthenticatedMachineHttpRequest } from "./machineHttpAuth.ts";
+import { followStreamInEnvironment } from "./machineStreams.ts";
 
 /** @public Required to name the error in consumers' inferred session results. */
 export class SessionHttpClientUnavailable extends Data.TaggedError(
@@ -27,7 +27,7 @@ function initialConfigOption<E>(
   return initialConfig.pipe(
     Effect.asSome,
     Effect.catch((error) =>
-      Effect.logWarning("Could not load the initial environment configuration.").pipe(
+      Effect.logWarning("Could not load the initial machine configuration.").pipe(
         Effect.annotateLogs({ ...safeErrorLogAttributes(error) }),
         Effect.as(Option.none<ServerConfig>()),
       ),
@@ -43,11 +43,11 @@ export const fetchEnvironmentSessionState = Effect.fn(
   readonly prepared: PreparedConnection;
   readonly signer: Option.Option<ManagedRelay.ManagedRelayDpopSigner["Service"]>;
   readonly remoteAuthorization?: Option.Option<
-    RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization["Service"]
+    RemoteMachineAuthorization.RemoteMachineAuthorization["Service"]
   >;
   readonly timeoutMs?: number;
 }) {
-  return yield* executeAuthenticatedEnvironmentHttpRequest({
+  return yield* executeAuthenticatedMachineHttpRequest({
     ...input,
     group: "auth",
     method: "GET",
@@ -62,10 +62,10 @@ export const fetchEnvironmentSessionState = Effect.fn(
 function makeEnvironmentSessionAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, E>,
 ) {
-  const initialConfigAtom = Atom.family((environmentId: EnvironmentId) =>
+  const initialConfigAtom = Atom.family((machineId: MachineId) =>
     runtime.atom(
       followStreamInEnvironment(
-        environmentId,
+        machineId,
         Stream.unwrap(
           EnvironmentSupervisor.EnvironmentSupervisor.pipe(
             Effect.map((supervisor) =>
@@ -87,21 +87,21 @@ function makeEnvironmentSessionAtoms<R, E>(
 
   // This is only the bootstrap config captured when a transport session is
   // established. Consumers that need current provider/settings state must use
-  // createServerEnvironmentAtoms(...).configValueAtom instead.
-  const initialConfigValueAtom = Atom.family((environmentId: EnvironmentId) =>
+  // createServerMachineAtoms(...).configValueAtom instead.
+  const initialConfigValueAtom = Atom.family((machineId: MachineId) =>
     Atom.make((get): ServerConfig | null =>
       Option.getOrNull(
-        Option.getOrElse(AsyncResult.value(get(initialConfigAtom(environmentId))), () =>
+        Option.getOrElse(AsyncResult.value(get(initialConfigAtom(machineId))), () =>
           Option.none(),
         ),
       ),
-    ).pipe(Atom.withLabel(`environment-config-value:${environmentId}`)),
+    ).pipe(Atom.withLabel(`machine-config-value:${machineId}`)),
   );
 
-  const preparedConnectionAtom = Atom.family((environmentId: EnvironmentId) =>
+  const preparedConnectionAtom = Atom.family((machineId: MachineId) =>
     runtime.atom(
       followStreamInEnvironment(
-        environmentId,
+        machineId,
         Stream.unwrap(
           EnvironmentSupervisor.EnvironmentSupervisor.pipe(
             Effect.map((supervisor) => SubscriptionRef.changes(supervisor.prepared)),
@@ -112,25 +112,25 @@ function makeEnvironmentSessionAtoms<R, E>(
     ),
   );
 
-  const preparedConnectionValueAtom = Atom.family((environmentId: EnvironmentId) =>
+  const preparedConnectionValueAtom = Atom.family((machineId: MachineId) =>
     Atom.make((get) =>
-      Option.getOrElse(AsyncResult.value(get(preparedConnectionAtom(environmentId))), () =>
+      Option.getOrElse(AsyncResult.value(get(preparedConnectionAtom(machineId))), () =>
         Option.none<PreparedConnection>(),
       ),
-    ).pipe(Atom.withLabel(`environment-prepared-connection:${environmentId}`)),
+    ).pipe(Atom.withLabel(`machine-prepared-connection:${machineId}`)),
   );
 
-  const sessionStateAtom = Atom.family((environmentId: EnvironmentId) =>
+  const sessionStateAtom = Atom.family((machineId: MachineId) =>
     runtime
       .atom((get) => {
-        const prepared = Option.getOrNull(get(preparedConnectionValueAtom(environmentId)));
+        const prepared = Option.getOrNull(get(preparedConnectionValueAtom(machineId)));
         if (prepared === null) {
           return Effect.never;
         }
         return Effect.gen(function* () {
           const signer = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);
           const remoteAuthorization = yield* Effect.serviceOption(
-            RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization,
+            RemoteMachineAuthorization.RemoteMachineAuthorization,
           );
           const client = yield* Effect.serviceOption(HttpClient.HttpClient);
           if (Option.isNone(client)) return yield* new SessionHttpClientUnavailable();
@@ -144,15 +144,15 @@ function makeEnvironmentSessionAtoms<R, E>(
       .pipe(
         Atom.swr({ staleTime: 30_000, revalidateOnMount: true }),
         Atom.setIdleTTL(5 * 60_000),
-        Atom.withLabel(`environment-session-state:${environmentId}`),
+        Atom.withLabel(`machine-session-state:${machineId}`),
       ),
   );
 
-  const sessionStateValueAtom = Atom.family((environmentId: EnvironmentId) =>
+  const sessionStateValueAtom = Atom.family((machineId: MachineId) =>
     Atom.make(
       (get): AuthSessionState | null =>
-        Option.getOrNull(AsyncResult.value(get(sessionStateAtom(environmentId)))) ?? null,
-    ).pipe(Atom.withLabel(`environment-session-state-value:${environmentId}`)),
+        Option.getOrNull(AsyncResult.value(get(sessionStateAtom(machineId)))) ?? null,
+    ).pipe(Atom.withLabel(`machine-session-state-value:${machineId}`)),
   );
 
   return {

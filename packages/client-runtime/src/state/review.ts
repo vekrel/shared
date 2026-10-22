@@ -23,12 +23,12 @@ export function createReviewEnvironmentAtoms<R, E>(
   const diffFileScheduler = createAtomCommandScheduler();
   return {
     diffPreview: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:review:diff-preview",
+      label: "machine-data:review:diff-preview",
       tag: WS_METHODS.reviewGetDiffPreview,
       staleTimeMs: 5_000,
     }),
     diffFilePatch: createEnvironmentQueryAtomFamily(runtime, {
-      label: "environment-data:review:diff-file-patch",
+      label: "machine-data:review:diff-file-patch",
       staleTimeMs: 5 * 60_000,
       execute: (input: {
         request: ReviewDiffPreviewInput & { file: NonNullable<ReviewDiffPreviewInput["file"]> };
@@ -53,14 +53,14 @@ export function createReviewEnvironmentAtoms<R, E>(
         ),
     }),
     diffFileContents: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:review:diff-file-contents",
+      label: "machine-data:review:diff-file-contents",
       tag: WS_METHODS.reviewGetDiffFileContents,
       scheduler: diffFileScheduler,
       concurrency: {
         mode: "singleFlight",
-        key: ({ environmentId, input }) =>
+        key: ({ machineId, input }) =>
           JSON.stringify([
-            environmentId,
+            machineId,
             input.cwd,
             input.sourceKind,
             input.baseRef,

@@ -1,5 +1,5 @@
 import type {
-  EnvironmentId,
+  MachineId,
   OrchestrationProjectShell,
   OrchestrationV2ShellSnapshot,
   ProjectId,
@@ -11,7 +11,7 @@ import { Atom } from "effect/reactivity";
 import type { EnvironmentProject } from "./models.ts";
 import { scopeProject } from "./models.ts";
 import { isScratchProject } from "./projects.ts";
-import { type EnvironmentCatalogState, enabledEnvironmentIds } from "./connections.ts";
+import { type EnvironmentCatalogState, enabledMachineIds } from "./connections.ts";
 import { arrayElementsEqual, parseProjectKey, projectKey, projectRefsEqual } from "./entities.ts";
 
 const EMPTY_PROJECTS: ReadonlyArray<OrchestrationProjectShell> = Object.freeze([]);
@@ -20,34 +20,34 @@ const EMPTY_PROJECT_INDEX: ReadonlyMap<ProjectId, OrchestrationProjectShell> = n
 export function createEnvironmentProjectAtoms(input: {
   readonly catalogValueAtom: Atom.Atom<EnvironmentCatalogState>;
   readonly snapshotAtom: (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   ) => Atom.Atom<OrchestrationV2ShellSnapshot | null>;
   readonly serverConfigValueAtom?: (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   ) => Atom.Atom<Pick<ServerConfig, "scratchWorkspaceRoot"> | null>;
 }) {
-  const environmentProjectsAtom = Atom.family((environmentId: EnvironmentId) =>
+  const environmentProjectsAtom = Atom.family((machineId: MachineId) =>
     Atom.make(
       (get): ReadonlyArray<OrchestrationProjectShell> =>
-        get(input.snapshotAtom(environmentId))?.projects ?? EMPTY_PROJECTS,
-    ).pipe(Atom.withLabel(`environment-projects:${environmentId}`)),
+        get(input.snapshotAtom(machineId))?.projects ?? EMPTY_PROJECTS,
+    ).pipe(Atom.withLabel(`machine-projects:${machineId}`)),
   );
 
-  const environmentProjectIndexAtom = Atom.family((environmentId: EnvironmentId) =>
+  const environmentProjectIndexAtom = Atom.family((machineId: MachineId) =>
     Atom.make((get): ReadonlyMap<ProjectId, OrchestrationProjectShell> => {
-      const projects = get(environmentProjectsAtom(environmentId));
+      const projects = get(environmentProjectsAtom(machineId));
       if (projects.length === 0) {
         return EMPTY_PROJECT_INDEX;
       }
       return new Map(projects.map((project) => [project.id, project] as const));
-    }).pipe(Atom.withLabel(`environment-project-index:${environmentId}`)),
+    }).pipe(Atom.withLabel(`machine-project-index:${machineId}`)),
   );
 
-  const environmentProjectRefsAtom = Atom.family((environmentId: EnvironmentId) => {
+  const environmentProjectRefsAtom = Atom.family((machineId: MachineId) => {
     let previous: ReadonlyArray<ScopedProjectRef> = [];
     return Atom.make((get) => {
-      const next = get(environmentProjectsAtom(environmentId)).map((project) => ({
-        environmentId,
+      const next = get(environmentProjectsAtom(machineId)).map((project) => ({
+        machineId,
         projectId: project.id,
       }));
       if (projectRefsEqual(previous, next)) {
@@ -55,7 +55,7 @@ export function createEnvironmentProjectAtoms(input: {
       }
       previous = next;
       return next;
-    }).pipe(Atom.withLabel(`environment-project-refs:${environmentId}`));
+    }).pipe(Atom.withLabel(`machine-project-refs:${machineId}`));
   });
 
   const projectAtomFamily = Atom.family((key: string) => {
@@ -64,13 +64,13 @@ export function createEnvironmentProjectAtoms(input: {
     let previousIsScratch = false;
     let previousValue: EnvironmentProject | null = null;
     return Atom.make((get) => {
-      const source = get(environmentProjectIndexAtom(ref.environmentId)).get(ref.projectId) ?? null;
+      const source = get(environmentProjectIndexAtom(ref.machineId)).get(ref.projectId) ?? null;
       const scratch =
         source !== null &&
         isScratchProject(
           source,
           input.serverConfigValueAtom
-            ? get(input.serverConfigValueAtom(ref.environmentId))?.scratchWorkspaceRoot
+            ? get(input.serverConfigValueAtom(ref.machineId))?.scratchWorkspaceRoot
             : null,
         );
       if (source === previousSource && scratch === previousIsScratch) {
@@ -82,25 +82,25 @@ export function createEnvironmentProjectAtoms(input: {
         source === null
           ? null
           : {
-              ...scopeProject(ref.environmentId, source),
+              ...scopeProject(ref.machineId, source),
               ...(scratch ? { isScratch: true as const } : {}),
             };
       return previousValue;
-    }).pipe(Atom.withLabel(`environment-project:${key}`));
+    }).pipe(Atom.withLabel(`machine-project:${key}`));
   });
 
   let previousProjectRefs: ReadonlyArray<ScopedProjectRef> = [];
   const projectRefsAtom = Atom.make((get) => {
     const refs: ScopedProjectRef[] = [];
-    for (const environmentId of enabledEnvironmentIds(get(input.catalogValueAtom))) {
-      refs.push(...get(environmentProjectRefsAtom(environmentId)));
+    for (const machineId of enabledMachineIds(get(input.catalogValueAtom))) {
+      refs.push(...get(environmentProjectRefsAtom(machineId)));
     }
     if (projectRefsEqual(previousProjectRefs, refs)) {
       return previousProjectRefs;
     }
     previousProjectRefs = refs;
     return refs;
-  }).pipe(Atom.withLabel("environment-project-refs"));
+  }).pipe(Atom.withLabel("machine-project-refs"));
 
   let previousProjects: ReadonlyArray<EnvironmentProject> = [];
   const projectsAtom = Atom.make((get) => {
@@ -113,18 +113,18 @@ export function createEnvironmentProjectAtoms(input: {
     }
     previousProjects = next;
     return previousProjects;
-  }).pipe(Atom.withLabel("environment-project-list"));
+  }).pipe(Atom.withLabel("machine-project-list"));
 
   const projectConfigsReadyAtom = Atom.make((get) => {
     const catalog = get(input.catalogValueAtom);
     if (!catalog.isReady) return false;
-    for (const environmentId of enabledEnvironmentIds(catalog)) {
-      if (input.serverConfigValueAtom && get(input.serverConfigValueAtom(environmentId)) === null) {
+    for (const machineId of enabledMachineIds(catalog)) {
+      if (input.serverConfigValueAtom && get(input.serverConfigValueAtom(machineId)) === null) {
         return false;
       }
     }
     return true;
-  }).pipe(Atom.withLabel("environment-project-configs-ready"));
+  }).pipe(Atom.withLabel("machine-project-configs-ready"));
 
   return {
     environmentProjectsAtom,

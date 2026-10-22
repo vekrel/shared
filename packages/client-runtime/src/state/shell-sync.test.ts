@@ -1,5 +1,5 @@
 import {
-  EnvironmentId,
+  MachineId,
   ORCHESTRATION_V2_WS_METHODS,
   type OrchestrationV2ShellSnapshot,
   type OrchestrationV2ShellStreamItem,
@@ -32,14 +32,14 @@ import * as ShellSnapshotLoader from "./shellSnapshotHttp.ts";
 import { v2Project, v2ShellSnapshot, v2ThreadShell } from "./orchestrationV2TestFixtures.ts";
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Test environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  machineId: MachineId.make("machine-1"),
+  label: "Test machine",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 
 const PREPARED: PreparedConnection = {
-  environmentId: TARGET.environmentId,
+  machineId: TARGET.machineId,
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
   socketUrl: TARGET.wsBaseUrl,
@@ -63,7 +63,7 @@ function session(client: WsRpcProtocolClient): RpcSession.RpcSession {
   };
 }
 
-describe("environment shell synchronization", () => {
+describe("machine shell synchronization", () => {
   it.effect("flushes the latest live snapshot without blocking connection state updates", () =>
     Effect.gen(function* () {
       const events = yield* Queue.unbounded<OrchestrationV2ShellStreamItem>();

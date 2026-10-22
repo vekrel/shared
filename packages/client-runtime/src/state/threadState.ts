@@ -10,7 +10,7 @@ export interface EnvironmentThreadState {
   readonly status: EnvironmentThreadStatus;
   readonly error: Option.Option<string>;
   /**
-   * Errors here are thread/history-local and must not be promoted into the environment
+   * Errors here are thread/history-local and must not be promoted into the machine
    * disconnect path.
    */
   readonly history: ThreadHistoryMeta;

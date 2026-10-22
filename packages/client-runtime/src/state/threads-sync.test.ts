@@ -1,5 +1,5 @@
 import {
-  EnvironmentId,
+  MachineId,
   EventId,
   MessageId,
   ORCHESTRATION_V2_WS_METHODS,
@@ -47,15 +47,15 @@ import {
 import * as ThreadSnapshotLoader from "./threadSnapshotHttp.ts";
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Test environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  machineId: MachineId.make("machine-1"),
+  label: "Test machine",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 const THREAD_ID = v2ThreadId;
 const CACHED_SNAPSHOT_SEQUENCE = 7;
 const PREPARED: PreparedConnection = {
-  environmentId: TARGET.environmentId,
+  machineId: TARGET.machineId,
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
   socketUrl: TARGET.wsBaseUrl,
@@ -204,9 +204,9 @@ const makeHarness = Effect.fn("TestEnvironmentThreads.makeHarness")(function* (o
             })
           : Option.none(),
       ),
-    saveThread: (environmentId, thread) =>
+    saveThread: (machineId, thread) =>
       Ref.update(savedThreads, (current) => [...current, thread]).pipe(
-        Effect.andThen(options?.saveThread?.(environmentId, thread) ?? Effect.void),
+        Effect.andThen(options?.saveThread?.(machineId, thread) ?? Effect.void),
       ),
     removeThread: (_environmentId, threadId) =>
       Ref.update(removedThreads, (current) => [...current, threadId]),
@@ -255,7 +255,7 @@ const makeHarness = Effect.fn("TestEnvironmentThreads.makeHarness")(function* (o
   return {
     threadState,
     loadEarlier: (throughEntryId?: string) =>
-      historyController.loadEarlier(TARGET.environmentId, THREAD_ID, throughEntryId),
+      historyController.loadEarlier(TARGET.machineId, THREAD_ID, throughEntryId),
     inputs,
     observed,
     latest,

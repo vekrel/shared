@@ -75,12 +75,12 @@ function projectAuthAccessSnapshot(
   return [snapshot, [projected]];
 }
 
-export function createAuthEnvironmentAtoms<R, E>(
+export function createAuthMachineAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
 ) {
   return {
     accessChanges: createEnvironmentSubscriptionAtomFamily(runtime, {
-      label: "environment-data:server:auth-access-changes",
+      label: "machine-data:server:auth-access-changes",
       subscribe: (_input: null) =>
         subscribe(WS_METHODS.subscribeAuthAccess, {}).pipe(
           Stream.mapAccum(() => EMPTY_AUTH_ACCESS_SNAPSHOT, projectAuthAccessSnapshot),

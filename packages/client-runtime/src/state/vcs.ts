@@ -1,5 +1,5 @@
 import {
-  type EnvironmentId,
+  type MachineId,
   type VcsListRefsInput,
   type VcsListRefsResult,
   type VcsStatusResult,
@@ -56,7 +56,7 @@ export const commitVcsRefsRefresh = Effect.fn("CachedVcsRefsState.commitRefresh"
   registry: AtomRegistry.AtomRegistry,
   cache: Persistence.EnvironmentCacheStore["Service"],
   input: {
-    readonly environmentId: EnvironmentId;
+    readonly machineId: MachineId;
     readonly cwd: string;
     readonly refs: VcsListRefsResult;
     readonly expectedRevision: number;
@@ -64,9 +64,9 @@ export const commitVcsRefsRefresh = Effect.fn("CachedVcsRefsState.commitRefresh"
   },
 ) {
   return yield* withVcsRefsPersistenceLock(
-    input.environmentId,
+    input.machineId,
     Effect.gen(function* () {
-      const stateAtom = vcsRefsCacheStateAtom({ environmentId: input.environmentId });
+      const stateAtom = vcsRefsCacheStateAtom({ machineId: input.machineId });
       const state = registry.get(stateAtom);
       if (state.revision !== input.expectedRevision) {
         return false;
@@ -74,12 +74,12 @@ export const commitVcsRefsRefresh = Effect.fn("CachedVcsRefsState.commitRefresh"
       let persistedCacheReadable = state.persistedCacheReadable;
       if (input.persist) {
         if (!persistedCacheReadable) {
-          persistedCacheReadable = yield* cache.clearVcsRefs(input.environmentId).pipe(
+          persistedCacheReadable = yield* cache.clearVcsRefs(input.machineId).pipe(
             Effect.as(true),
             Effect.catch((error) =>
               Effect.logWarning("Could not recover invalidated cached Git refs.").pipe(
                 Effect.annotateLogs({
-                  environmentId: input.environmentId,
+                  machineId: input.machineId,
                   cwd: input.cwd,
                   ...safeErrorLogAttributes(error),
                 }),
@@ -88,11 +88,11 @@ export const commitVcsRefsRefresh = Effect.fn("CachedVcsRefsState.commitRefresh"
             ),
           );
         }
-        yield* cache.saveVcsRefs(input.environmentId, input.cwd, input.refs).pipe(
+        yield* cache.saveVcsRefs(input.machineId, input.cwd, input.refs).pipe(
           Effect.catch((error) =>
             Effect.logWarning("Could not persist cached Git refs.").pipe(
               Effect.annotateLogs({
-                environmentId: input.environmentId,
+                machineId: input.machineId,
                 cwd: input.cwd,
                 ...safeErrorLogAttributes(error),
               }),
@@ -125,15 +125,15 @@ export const makeCachedVcsRefsChanges = Effect.fn("CachedVcsRefsState.makeChange
 ) {
   const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
   const cache = yield* Persistence.EnvironmentCacheStore;
-  const environmentId = supervisor.target.environmentId;
+  const machineId = supervisor.target.machineId;
   const useCache = canUseVcsRefsCache(input);
   const cached =
     useCache && persistedCacheReadable
-      ? yield* cache.loadVcsRefs(environmentId, input.cwd).pipe(
+      ? yield* cache.loadVcsRefs(machineId, input.cwd).pipe(
           Effect.catch((error) =>
             Effect.logWarning("Could not load cached Git refs.").pipe(
               Effect.annotateLogs({
-                environmentId,
+                machineId,
                 cwd: input.cwd,
                 ...safeErrorLogAttributes(error),
               }),
@@ -146,11 +146,11 @@ export const makeCachedVcsRefsChanges = Effect.fn("CachedVcsRefsState.makeChange
     const refs = yield* request(WS_METHODS.vcsListRefs, input).pipe(
       Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
     );
-    const persist = cache.saveVcsRefs(environmentId, input.cwd, refs).pipe(
+    const persist = cache.saveVcsRefs(machineId, input.cwd, refs).pipe(
       Effect.catch((error) =>
         Effect.logWarning("Could not persist cached Git refs.").pipe(
           Effect.annotateLogs({
-            environmentId,
+            machineId,
             cwd: input.cwd,
             ...safeErrorLogAttributes(error),
           }),
@@ -162,7 +162,7 @@ export const makeCachedVcsRefsChanges = Effect.fn("CachedVcsRefsState.makeChange
       return Option.some(refs);
     }
     const committed = yield* commitVcsRefsRefresh(registry, cache, {
-      environmentId,
+      machineId,
       cwd: input.cwd,
       refs,
       expectedRevision,
@@ -192,7 +192,7 @@ export const makeCachedVcsRefsChanges = Effect.fn("CachedVcsRefsState.makeChange
               Effect.tapError((error) =>
                 Effect.logWarning("Could not refresh Git refs.").pipe(
                   Effect.annotateLogs({
-                    environmentId,
+                    machineId,
                     cwd: input.cwd,
                     ...safeErrorLogAttributes(error),
                   }),
@@ -215,13 +215,13 @@ export const makeCachedVcsRefsChanges = Effect.fn("CachedVcsRefsState.makeChange
 });
 
 function cachedVcsRefsChanges(
-  environmentId: EnvironmentId,
+  machineId: MachineId,
   input: VcsListRefsInput,
   expectedRevision: number,
   persistedCacheReadable: boolean,
 ) {
   return followStreamInEnvironment(
-    environmentId,
+    machineId,
     Stream.unwrap(
       Effect.gen(function* () {
         const registry = yield* AtomRegistry.AtomRegistry;
@@ -241,16 +241,16 @@ export function createVcsEnvironmentAtoms<R, E>(
 ) {
   /**
    * One flat family on purpose: families hold entries via WeakRef, so a nested
-   * per-environment family can be collected between lookups, dropping every
+   * per-machine family can be collected between lookups, dropping every
    * cached page atom and collapsing paginated ref lists mid-scroll.
    */
   const listRefsFamily = Atom.family((key: string) => {
-    const [environmentId, input] = JSON.parse(key) as [EnvironmentId, VcsListRefsInput];
+    const [machineId, input] = JSON.parse(key) as [MachineId, VcsListRefsInput];
     return runtime
       .atom((get) => {
-        const state = get(vcsRefsCacheStateAtom({ environmentId }));
+        const state = get(vcsRefsCacheStateAtom({ machineId }));
         return cachedVcsRefsChanges(
-          environmentId,
+          machineId,
           input,
           state.revision,
           state.persistedCacheReadable,
@@ -258,19 +258,19 @@ export function createVcsEnvironmentAtoms<R, E>(
       })
       .pipe(
         Atom.setIdleTTL(VCS_REFS_IDLE_TTL_MS),
-        Atom.withLabel(`environment-data:vcs:list-refs:${key}`),
+        Atom.withLabel(`machine-data:vcs:list-refs:${key}`),
       );
   });
   const listRefs = (target: {
-    readonly environmentId: EnvironmentId;
+    readonly machineId: MachineId;
     readonly input: VcsListRefsInput;
-  }) => listRefsFamily(JSON.stringify([target.environmentId, target.input]));
+  }) => listRefsFamily(JSON.stringify([target.machineId, target.input]));
   const invalidateRefs = (
-    target: { readonly environmentId: EnvironmentId; readonly input: { readonly cwd: string } },
+    target: { readonly machineId: MachineId; readonly input: { readonly cwd: string } },
     registry: AtomRegistry.AtomRegistry,
   ) =>
     invalidateCachedVcsRefs(registry, {
-      environmentId: target.environmentId,
+      machineId: target.machineId,
       cwd: target.input.cwd,
     });
 
@@ -279,11 +279,11 @@ export function createVcsEnvironmentAtoms<R, E>(
     // An uncached read for decisions that must match the repository now, not
     // the persisted list a picker renders from.
     readRefs: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:vcs:read-refs",
+      label: "machine-data:vcs:read-refs",
       tag: WS_METHODS.vcsListRefs,
     }),
     status: createEnvironmentSubscriptionAtomFamily(runtime, {
-      label: "environment-data:vcs:status",
+      label: "machine-data:vcs:status",
       idleTtlMs: VCS_STATUS_IDLE_TTL_MS,
       subscribe: (input: EnvironmentRpcInput<typeof WS_METHODS.subscribeVcsStatus>) =>
         subscribe(WS_METHODS.subscribeVcsStatus, input).pipe(
@@ -297,58 +297,58 @@ export function createVcsEnvironmentAtoms<R, E>(
         ),
     }),
     pull: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:vcs:pull",
+      label: "machine-data:vcs:pull",
       tag: WS_METHODS.vcsPull,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
     refreshStatus: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:vcs:refresh-status",
+      label: "machine-data:vcs:refresh-status",
       tag: WS_METHODS.vcsRefreshStatus,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
     createWorktree: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:vcs:create-worktree",
+      label: "machine-data:vcs:create-worktree",
       tag: WS_METHODS.vcsCreateWorktree,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
     worktreeSetup: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
-      label: "environment-data:vcs:worktree-setup",
+      label: "machine-data:vcs:worktree-setup",
       tag: WS_METHODS.subscribeWorktreeSetup,
       idleTtlMs: VCS_STATUS_IDLE_TTL_MS,
     }),
     cancelWorktreeSetup: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:vcs:cancel-worktree-setup",
+      label: "machine-data:vcs:cancel-worktree-setup",
       tag: WS_METHODS.worktreeSetupCancel,
     }),
     removeWorktree: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:vcs:remove-worktree",
+      label: "machine-data:vcs:remove-worktree",
       tag: WS_METHODS.vcsRemoveWorktree,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
     createRef: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:vcs:create-ref",
+      label: "machine-data:vcs:create-ref",
       tag: WS_METHODS.vcsCreateRef,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
     switchRef: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:vcs:switch-ref",
+      label: "machine-data:vcs:switch-ref",
       tag: WS_METHODS.vcsSwitchRef,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
     init: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:vcs:init",
+      label: "machine-data:vcs:init",
       tag: WS_METHODS.vcsInit,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,

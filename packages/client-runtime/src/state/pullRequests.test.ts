@@ -2,7 +2,7 @@ import { createCommandPermissions } from "./commandPermissions.ts";
 import { RpcPermissionGuard } from "../rpc/client.ts";
 import { vi } from "vite-plus/test";
 import {
-  EnvironmentId,
+  MachineId,
   AuthSourceControlWriteScope,
   AuthOrchestrationOperateScope,
   ProjectId,
@@ -56,12 +56,12 @@ const trustedRouting = {
 class MutationRefused extends Data.TaggedError("MutationRefused") {}
 
 for (const scenario of [
-  "prefers the local environment with the same github account",
+  "prefers the local machine with the same github account",
   "falls back before mutation when the local account differs",
   "never retries an ambiguous mutation failure",
   "returns a fast local source read without checking alternate identities",
-  "keeps single-environment requests free of identity lookups",
-  "keeps a local origin ahead of another local environment",
+  "keeps single-machine requests free of identity lookups",
+  "keeps a local origin ahead of another local machine",
   "keeps mutations on an old origin server without retrying them",
   "skips an old alternate server before dispatching a mutation",
   "returns a successful mutation when source invalidation stalls",
@@ -87,9 +87,9 @@ for (const scenario of [
         const ambiguous = scenario === "never retries an ambiguous mutation failure";
         const reading =
           scenario === "returns a fast local source read without checking alternate identities";
-        const single = scenario === "keeps single-environment requests free of identity lookups";
+        const single = scenario === "keeps single-machine requests free of identity lookups";
         const localOrigin =
-          scenario === "keeps a local origin ahead of another local environment" ||
+          scenario === "keeps a local origin ahead of another local machine" ||
           switchedAccount ||
           reading;
         const oldOrigin =
@@ -174,7 +174,7 @@ for (const scenario of [
             new Map(
               [...entries].map(([id, entry]) => [
                 id,
-                id === TARGET.environmentId ? entry : { ...entry, enabled: false },
+                id === TARGET.machineId ? entry : { ...entry, enabled: false },
               ]),
             ),
         );
@@ -363,7 +363,7 @@ it.effect.each(["revoked", "disabled"] as const)(
               new Map(
                 [...entries].map(([id, entry]) => [
                   id,
-                  id === TARGET.environmentId ? entry : { ...entry, enabled: false },
+                  id === TARGET.machineId ? entry : { ...entry, enabled: false },
                 ]),
               ),
           );
@@ -440,7 +440,7 @@ it.effect("forgets routed viewed marks when a viewed-files batch fails", () =>
         repository: "acme/web",
         number: 7,
       };
-      const invalidations: { environment: string; input: unknown }[] = [];
+      const invalidations: { machine: string; input: unknown }[] = [];
       const identity = () =>
         Effect.succeed({
           host: reference.host,
@@ -448,7 +448,7 @@ it.effect("forgets routed viewed marks when a viewed-files batch fails", () =>
           accountId: "123",
           viewer: "maria-rcks",
         });
-      const clientFor = (environment: string) =>
+      const clientFor = (machine: string) =>
         ({
           [WS_METHODS.pullRequestsRouting]: identity,
           [WS_METHODS.pullRequestsRoutingIdentity]: identity,
@@ -458,7 +458,7 @@ it.effect("forgets routed viewed marks when a viewed-files batch fails", () =>
           [WS_METHODS.pullRequestsSetFilesViewed]: () => Effect.fail("second path refused"),
           [WS_METHODS.pullRequestsInvalidate]: (input: unknown) =>
             Effect.sync(() => {
-              invalidations.push({ environment, input });
+              invalidations.push({ machine, input });
             }),
         }) as unknown as WsRpcProtocolClient;
       const { environmentRegistry, supervisor } = yield* makeTestRuntime(
@@ -485,7 +485,7 @@ it.effect("forgets routed viewed marks when a viewed-files batch fails", () =>
       );
       expect(write._tag).toBe("Failure");
       expect(invalidations).toContainEqual({
-        environment: "local",
+        machine: "local",
         input: { reference: expect.objectContaining(reference), filesViewedOnly: true },
       });
       for (const call of invalidations) {
@@ -496,10 +496,10 @@ it.effect("forgets routed viewed marks when a viewed-files batch fails", () =>
 );
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Test environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  machineId: MachineId.make("machine-1"),
+  label: "Test machine",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 
 function session(client: WsRpcProtocolClient): RpcSession {
@@ -547,8 +547,8 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
     retryNow: Effect.void,
   } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
   const localTarget = new PrimaryConnectionTarget({
-    environmentId: EnvironmentId.make("local-environment"),
-    label: "Local environment",
+    machineId: MachineId.make("local-machine"),
+    label: "Local machine",
     httpBaseUrl: "http://localhost:3773",
     wsBaseUrl: "ws://localhost:3773",
   });
@@ -558,27 +558,27 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
     session: yield* SubscriptionRef.make(Option.some(session(localClient ?? client))),
   };
   const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
-    entries: yield* SubscriptionRef.make<ReadonlyMap<EnvironmentId, ConnectionCatalogEntry>>(
+    entries: yield* SubscriptionRef.make<ReadonlyMap<MachineId, ConnectionCatalogEntry>>(
       new Map([
         [
-          originTarget.environmentId,
+          originTarget.machineId,
           { target: originTarget, profile: Option.none(), enabled: true },
         ],
         ...(localClient === undefined
           ? []
           : [
               [
-                localTarget.environmentId,
+                localTarget.machineId,
                 { target: localTarget, profile: Option.none(), enabled: true },
               ] as const,
             ]),
       ]),
     ),
-    run: (environmentId, effect) =>
+    run: (machineId, effect) =>
       Effect.provideService(
         effect,
         EnvironmentSupervisor.EnvironmentSupervisor,
-        environmentId === localTarget.environmentId ? localSupervisor : supervisor,
+        machineId === localTarget.machineId ? localSupervisor : supervisor,
       ),
     runStream: (_environmentId, stream) =>
       Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
@@ -609,7 +609,7 @@ it.effect.each([
   "destination-disabled",
   "destination-unsupported",
 ] as const)(
-  "preserves source requests when routing to another environment is blocked by %s",
+  "preserves source requests when routing to another machine is blocked by %s",
   (permission) =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -632,7 +632,7 @@ it.effect.each([
         } as unknown as WsRpcProtocolClient;
         const alternate = {
           [WS_METHODS.pullRequestsRoutingIdentity]: () =>
-            Effect.die("untrusted environment was contacted"),
+            Effect.die("untrusted machine was contacted"),
         } as unknown as WsRpcProtocolClient;
         const { environmentRegistry, supervisor, localSupervisor } = yield* makeTestRuntime(
           client,
@@ -645,7 +645,7 @@ it.effect.each([
               new Map(
                 [...entries].map(([id, entry]) => [
                   id,
-                  id === TARGET.environmentId
+                  id === TARGET.machineId
                     ? entry
                     : {
                         ...entry,
@@ -687,7 +687,7 @@ it.effect.each([
                       : permission === "destination-disabled" ||
                           permission === "destination-unsupported"
                         ? "read-write"
-                        : (entry.target.environmentId === TARGET.environmentId) ===
+                        : (entry.target.machineId === TARGET.machineId) ===
                             (permission === "origin-off")
                           ? "off"
                           : "read-write",
@@ -749,18 +749,18 @@ it.effect.each(
         [WS_METHODS.pullRequestsInvalidate]: () => Effect.void,
       } as unknown as WsRpcProtocolClient;
       const { environmentRegistry, supervisor } = yield* makeTestRuntime(client, alternate);
-      const environmentId =
-        side === "origin" ? TARGET.environmentId : EnvironmentId.make("local-environment");
+      const machineId =
+        side === "origin" ? TARGET.machineId : MachineId.make("local-machine");
       const profile = new SshConnectionProfile({
         connectionId: "ssh-1",
-        environmentId,
+        machineId,
         label: "SSH",
         target: { alias: "work", hostname: "work.example.test", username: "maria", port: 22 },
       });
       yield* SubscriptionRef.update(environmentRegistry.entries, (entries) =>
-        new Map(entries).set(environmentId, {
+        new Map(entries).set(machineId, {
           target: new SshConnectionTarget({
-            environmentId,
+            machineId,
             connectionId: profile.connectionId,
             label: "SSH",
           }),
@@ -888,15 +888,15 @@ it.live(
     Effect.scoped(
       Effect.gen(function* () {
         let originAccountId = "123";
-        const mutations: { environment: string; expectedAccountId: string }[] = [];
-        const invalidations: { environment: string; input: unknown }[] = [];
+        const mutations: { machine: string; expectedAccountId: string }[] = [];
+        const invalidations: { machine: string; input: unknown }[] = [];
         const identities: string[] = [];
         const clientFor = (local: boolean) => {
-          const environment = local ? "local" : "origin";
+          const machine = local ? "local" : "origin";
           return {
             [local ? WS_METHODS.pullRequestsRoutingIdentity : WS_METHODS.pullRequestsRouting]: () =>
               Effect.sync(() => {
-                identities.push(environment);
+                identities.push(machine);
                 return {
                   host: "github.com",
                   provider: "github",
@@ -907,11 +907,11 @@ it.live(
             [WS_METHODS.pullRequestsSummary]: () => (local ? Effect.succeed(null) : Effect.never),
             [WS_METHODS.pullRequestsRunAction]: (input: { expectedAccountId: string }) =>
               Effect.sync(() => {
-                mutations.push({ environment, expectedAccountId: input.expectedAccountId });
+                mutations.push({ machine, expectedAccountId: input.expectedAccountId });
               }),
             [WS_METHODS.pullRequestsInvalidate]: (input: unknown) =>
               Effect.sync(() => {
-                invalidations.push({ environment, input });
+                invalidations.push({ machine, input });
               }),
           } as unknown as WsRpcProtocolClient;
         };
@@ -931,15 +931,15 @@ it.live(
           originAccountId = "456";
           yield* route(WS_METHODS.pullRequestsRunAction, { ...reference, action: "merge" });
 
-          expect(identities.filter((environment) => environment === "origin")).toHaveLength(2);
-          expect(mutations).toEqual([{ environment: "origin", expectedAccountId: "456" }]);
+          expect(identities.filter((machine) => machine === "origin")).toHaveLength(2);
+          expect(mutations).toEqual([{ machine: "origin", expectedAccountId: "456" }]);
           expect(invalidations).toEqual(
             expect.arrayContaining([
-              { environment: "origin", input: { reference: expect.objectContaining(reference) } },
-              { environment: "origin", input: { reference: hostedReference } },
-              { environment: "local", input: { reference: hostedReference } },
-              { environment: "origin", input: {} },
-              { environment: "local", input: {} },
+              { machine: "origin", input: { reference: expect.objectContaining(reference) } },
+              { machine: "origin", input: { reference: hostedReference } },
+              { machine: "local", input: { reference: hostedReference } },
+              { machine: "origin", input: {} },
+              { machine: "local", input: {} },
             ]),
           );
 
@@ -947,13 +947,13 @@ it.live(
           const refresh = createPullRequestRouter();
           yield* refresh(WS_METHODS.pullRequestsInvalidate, { reference });
           expect(invalidations).toContainEqual({
-            environment: "local",
+            machine: "local",
             input: { reference: hostedReference },
           });
 
           invalidations.length = 0;
           yield* refresh(WS_METHODS.pullRequestsInvalidate, {});
-          expect(invalidations).toContainEqual({ environment: "local", input: {} });
+          expect(invalidations).toContainEqual({ machine: "local", input: {} });
         }).pipe(
           Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
           Effect.provideService(GitHubRoutingPermissions, trustedRouting),
@@ -989,12 +989,12 @@ it.effect("keeps concurrent diff file reads on different hosts separate", () =>
         newPath: "src/app.ts",
       } as const;
       const first = atoms.diffFileContents.run(registry, {
-        environmentId: TARGET.environmentId,
+        machineId: TARGET.machineId,
         input: { ...input, host: "github.com" },
       });
       yield* started.await;
       const second = atoms.diffFileContents.run(registry, {
-        environmentId: TARGET.environmentId,
+        machineId: TARGET.machineId,
         input: { ...input, host: "github.example.com" },
       });
       yield* release.open;
@@ -1029,7 +1029,7 @@ it.effect.each(["closed", "draft", "permission", "stack", "method"] as const)(
         } as unknown as WsRpcProtocolClient;
         const { atoms, registry } = yield* makeTestRuntime(client);
         const target = {
-          environmentId: TARGET.environmentId,
+          machineId: TARGET.machineId,
           input: { projectId: ProjectId.make("project-1"), repository: "acme/web", number: 1 },
         };
         const merge = atoms.runAction.run(registry, {
@@ -1079,7 +1079,7 @@ it.effect("keeps a close batch ordered and continues after a refused close", () 
       const { atoms, registry } = yield* makeTestRuntime(client);
       const batch = [6, 5, 4].map((number) =>
         atoms.runAction.run(registry, {
-          environmentId: TARGET.environmentId,
+          machineId: TARGET.machineId,
           input: {
             projectId: ProjectId.make("project-1"),
             repository: "acme/web",
@@ -1131,7 +1131,7 @@ it.effect("keeps hover previews fresh after edits and turns", () =>
         [WS_METHODS.pullRequestsInvalidate]: () => Effect.void,
       } as unknown as WsRpcProtocolClient;
       const { atoms, registry } = yield* makeTestRuntime(client);
-      const target = { environmentId: TARGET.environmentId, input: reference };
+      const target = { machineId: TARGET.machineId, input: reference };
       const preview = atoms.preview(target);
       const unmount = registry.mount(preview);
       yield* Effect.addFinalizer(() => Effect.sync(unmount));
@@ -1156,7 +1156,7 @@ it.effect("keeps hover previews fresh after edits and turns", () =>
       title = "Refreshed";
       yield* Effect.promise(() =>
         atoms.invalidate.run(registry, {
-          environmentId: target.environmentId,
+          machineId: target.machineId,
           input: { reference },
         }),
       );
@@ -1199,7 +1199,7 @@ it.effect("shares close, reopen, and merge with an untouched client's mounted PR
       const writer = yield* makeTestRuntime(client);
       const reader = yield* makeTestRuntime(client);
       const target = {
-        environmentId: TARGET.environmentId,
+        machineId: TARGET.machineId,
         input: {
           projectId: ProjectId.make("project-1"),
           host: "github.example.com",
@@ -1213,7 +1213,7 @@ it.effect("shares close, reopen, and merge with an untouched client's mounted PR
         reader.atoms.refreshes,
       )(target);
       const list = reader.atoms.list({
-        environmentId: TARGET.environmentId,
+        machineId: TARGET.machineId,
         input: { state: "all" },
       });
       const unmountDetail = reader.registry.mount(detail);
@@ -1287,7 +1287,7 @@ it.effect("keeps live detail reads separate from reads that allow stale data", (
       } as unknown as WsRpcProtocolClient;
       const { atoms, registry } = yield* makeTestRuntime(client);
       const target = {
-        environmentId: TARGET.environmentId,
+        machineId: TARGET.machineId,
         input: { projectId: ProjectId.make("project-1"), repository: "acme/web", number: 1 },
       };
       const cached = atoms.detail(target);
@@ -1337,7 +1337,7 @@ it.effect("updates cached labels after successful edits without rereading the ho
       } as unknown as WsRpcProtocolClient;
       const { atoms, registry } = yield* makeTestRuntime(client);
       const target = {
-        environmentId: TARGET.environmentId,
+        machineId: TARGET.machineId,
         input: {
           projectId: ProjectId.make("project-1"),
           repository: "acme/web",
@@ -1422,7 +1422,7 @@ it.effect("updates cached labels after successful edits without rereading the ho
 vi.mock("./session.ts", () => ({
   createEnvironmentSessionAtoms: () => ({ sessionStateAtom: grantedSessions }),
 }));
-const grantedSessions = Atom.family((_id: EnvironmentId) =>
+const grantedSessions = Atom.family((_id: MachineId) =>
   Atom.make<AsyncResult.AsyncResult<AuthSessionState>>(
     AsyncResult.success({
       authenticated: true,
@@ -1451,7 +1451,7 @@ it.effect("denies a routed write when only the origin has source-control permiss
           }),
       } as unknown as WsRpcProtocolClient;
       const fixture = yield* makeTestRuntime(client, client);
-      const local = EnvironmentId.make("local-environment");
+      const local = MachineId.make("local-machine");
       const stop = fixture.registry.mount(grantedSessions(local));
       yield* Effect.addFinalizer(() => Effect.sync(stop));
       fixture.registry.set(
@@ -1486,7 +1486,7 @@ it.effect("denies a routed write when only the origin has source-control permiss
         }),
         Effect.flip,
       );
-      expect(error._tag).toBe("EnvironmentAuthorizationError");
+      expect(error._tag).toBe("MachineAuthorizationError");
       expect(writes).toBe(0);
     }),
   ),
@@ -1516,11 +1516,11 @@ it.effect("publishes the accepted guide run before the follow-up read finishes",
       } as unknown as WsRpcProtocolClient;
       const { atoms, registry } = yield* makeTestRuntime(client);
       const target = {
-        environmentId: TARGET.environmentId,
+        machineId: TARGET.machineId,
         input: { projectId: ProjectId.make("project-1"), repository: "acme/web", number: 1 },
       };
       registry.update(
-        grantedSessions(target.environmentId),
+        grantedSessions(target.machineId),
         AsyncResult.map((session) => ({
           ...session,
           scopes: [...(session.scopes ?? []), AuthOrchestrationOperateScope],

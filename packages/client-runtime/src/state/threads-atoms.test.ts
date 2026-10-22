@@ -1,5 +1,5 @@
 import {
-  EnvironmentId,
+  MachineId,
   EventId,
   ORCHESTRATION_V2_WS_METHODS,
   TurnItemId,
@@ -39,10 +39,10 @@ import { createEnvironmentThreadStateAtoms, type EnvironmentThreadState } from "
 import * as ThreadSnapshotLoader from "./threadSnapshotHttp.ts";
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Test environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  machineId: MachineId.make("machine-1"),
+  label: "Test machine",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 const THREAD_ID = v2ThreadId;
 const THREAD: OrchestrationV2ThreadProjection = {
@@ -108,7 +108,7 @@ const makeHarness = Effect.fn("TestThreadAtoms.makeHarness")(function* (options?
     session: yield* SubscriptionRef.make(Option.some(session)),
     prepared: yield* SubscriptionRef.make<Option.Option<PreparedConnection>>(
       Option.some({
-        environmentId: TARGET.environmentId,
+        machineId: TARGET.machineId,
         label: TARGET.label,
         httpBaseUrl: TARGET.httpBaseUrl,
         socketUrl: TARGET.wsBaseUrl,
@@ -121,20 +121,20 @@ const makeHarness = Effect.fn("TestThreadAtoms.makeHarness")(function* (options?
     retryNow: Effect.void,
   });
   const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
-    entries: yield* SubscriptionRef.make<ReadonlyMap<EnvironmentId, ConnectionCatalogEntry>>(
+    entries: yield* SubscriptionRef.make<ReadonlyMap<MachineId, ConnectionCatalogEntry>>(
       new Map(),
     ),
     networkStatus: yield* SubscriptionRef.make<NetworkStatus>("online"),
     start: Effect.void,
-    register: () => Effect.die("Unexpected environment registration"),
-    registerPlatform: () => Effect.die("Unexpected environment registration"),
-    reconcilePlatform: () => Effect.die("Unexpected environment reconciliation"),
-    remove: () => Effect.die("Unexpected environment removal"),
+    register: () => Effect.die("Unexpected machine registration"),
+    registerPlatform: () => Effect.die("Unexpected machine registration"),
+    reconcilePlatform: () => Effect.die("Unexpected machine reconciliation"),
+    remove: () => Effect.die("Unexpected machine removal"),
     removeRoute: () => Effect.die("Unexpected route removal"),
     reorderRoutes: () => Effect.die("Unexpected route reorder"),
-    removeRelayEnvironments: () => Effect.die("Unexpected environment removal"),
+    removeRelayMachines: () => Effect.die("Unexpected machine removal"),
     retryNow: () => Effect.void,
-    setEnabled: () => Effect.die("Unexpected environment toggle"),
+    setEnabled: () => Effect.die("Unexpected machine toggle"),
     setCompatibility: () => Effect.die("Unexpected compatibility update"),
     state: () => SubscriptionRef.get(supervisor.state),
     stateChanges: () => SubscriptionRef.changes(supervisor.state),
@@ -213,7 +213,7 @@ const makeHarness = Effect.fn("TestThreadAtoms.makeHarness")(function* (options?
   );
   const raw = createEnvironmentThreadStateAtoms(runtime);
   const details = createEnvironmentThreadDetailAtoms(raw.stateAtom);
-  const ref = { environmentId: TARGET.environmentId, threadId: THREAD_ID };
+  const ref = { machineId: TARGET.machineId, threadId: THREAD_ID };
   const stateAtom = details.stateAtom(ref);
   const makeRegistry = Effect.acquireRelease(
     Effect.sync(() => AtomRegistry.make({ defaultIdleTTL: 60_000, timeoutResolution: 1 })),
@@ -230,7 +230,7 @@ const makeHarness = Effect.fn("TestThreadAtoms.makeHarness")(function* (options?
     ref,
     subscriptions,
     olderLoads,
-    loadEarlier: () => historyController.loadEarlier(TARGET.environmentId, THREAD_ID),
+    loadEarlier: () => historyController.loadEarlier(TARGET.machineId, THREAD_ID),
     counts: () => ({ httpLoads, diskLoads, opened, active }),
   };
 });

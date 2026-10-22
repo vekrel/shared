@@ -1,6 +1,6 @@
 import { vi } from "vite-plus/test";
 import {
-  EnvironmentId,
+  MachineId,
   AuthSourceControlWriteScope,
   WS_METHODS,
   VcsProcessExitError,
@@ -45,10 +45,10 @@ import {
 } from "./vcsRefInvalidation.ts";
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Test environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  machineId: MachineId.make("machine-1"),
+  label: "Test machine",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 
 const CONNECTED_CONNECTION_STATE: SupervisorConnectionState = {
@@ -120,16 +120,16 @@ function cacheWithRefs(
 }
 
 describe("cached VCS refs", () => {
-  it("invalidates all ref streams in the mutated environment", () => {
+  it("invalidates all ref streams in the mutated machine", () => {
     const registry = AtomRegistry.make();
-    const environment = {
-      environmentId: TARGET.environmentId,
+    const machine = {
+      machineId: TARGET.machineId,
     };
     const otherEnvironment = {
-      environmentId: EnvironmentId.make("environment-2"),
+      machineId: MachineId.make("machine-2"),
     };
 
-    expect(registry.get(vcsRefsCacheStateAtom(environment))).toEqual({
+    expect(registry.get(vcsRefsCacheStateAtom(machine))).toEqual({
       revision: 0,
       persistedCacheReadable: true,
     });
@@ -138,9 +138,9 @@ describe("cached VCS refs", () => {
       persistedCacheReadable: true,
     });
 
-    invalidateVcsRefs(registry, environment);
+    invalidateVcsRefs(registry, machine);
 
-    expect(registry.get(vcsRefsCacheStateAtom(environment))).toEqual({
+    expect(registry.get(vcsRefsCacheStateAtom(machine))).toEqual({
       revision: 1,
       persistedCacheReadable: true,
     });
@@ -174,13 +174,13 @@ describe("cached VCS refs", () => {
         });
 
         yield* invalidateCachedVcsRefs(registry, {
-          environmentId: TARGET.environmentId,
+          machineId: TARGET.machineId,
           cwd: "/repo-worktree",
         }).pipe(Effect.provideService(Persistence.EnvironmentCacheStore, cache));
 
         expect(
           yield* commitVcsRefsRefresh(registry, cache, {
-            environmentId: TARGET.environmentId,
+            machineId: TARGET.machineId,
             cwd: "/repo",
             refs: CACHED_REFS,
             expectedRevision: 0,
@@ -198,7 +198,7 @@ describe("cached VCS refs", () => {
 
         expect(
           yield* commitVcsRefsRefresh(registry, cache, {
-            environmentId: TARGET.environmentId,
+            machineId: TARGET.machineId,
             cwd: "/repo",
             refs: LIVE_REFS,
             expectedRevision: 1,
@@ -214,7 +214,7 @@ describe("cached VCS refs", () => {
     Effect.scoped(
       Effect.gen(function* () {
         const expectedError = new EnvironmentRpcUnavailableError({
-          environmentId: TARGET.environmentId,
+          machineId: TARGET.machineId,
           message: "pull failed after fetching refs",
         });
         const client = {
@@ -256,7 +256,7 @@ describe("cached VCS refs", () => {
 
         const result = yield* Effect.promise(() =>
           atoms.pull.run(registry, {
-            environmentId: TARGET.environmentId,
+            machineId: TARGET.machineId,
             input: { cwd: "/repo" },
           }),
         );
@@ -267,7 +267,7 @@ describe("cached VCS refs", () => {
 
         const refreshResult = yield* Effect.promise(() =>
           atoms.refreshStatus.run(registry, {
-            environmentId: TARGET.environmentId,
+            machineId: TARGET.machineId,
             input: { cwd: "/repo" },
           }),
         );
@@ -279,7 +279,7 @@ describe("cached VCS refs", () => {
     ),
   );
 
-  it.effect("suppresses persisted snapshots after an environment-wide clear fails", () =>
+  it.effect("suppresses persisted snapshots after a machine-wide clear fails", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const registry = yield* Effect.acquireRelease(Effect.sync(AtomRegistry.make), (registry) =>
@@ -310,7 +310,7 @@ describe("cached VCS refs", () => {
         });
 
         yield* invalidateCachedVcsRefs(registry, {
-          environmentId: TARGET.environmentId,
+          machineId: TARGET.machineId,
           cwd: "/repo",
         }).pipe(Effect.provideService(Persistence.EnvironmentCacheStore, cache));
 
@@ -348,7 +348,7 @@ describe("cached VCS refs", () => {
 
         expect(
           yield* commitVcsRefsRefresh(registry, cache, {
-            environmentId: TARGET.environmentId,
+            machineId: TARGET.machineId,
             cwd: "/repo",
             refs: LIVE_REFS,
             expectedRevision: state.revision,
@@ -603,7 +603,7 @@ describe("cached VCS refs", () => {
 vi.mock("./session.ts", () => ({
   createEnvironmentSessionAtoms: () => ({ sessionStateAtom: grantedSessions }),
 }));
-const grantedSessions = Atom.family((_id: EnvironmentId) =>
+const grantedSessions = Atom.family((_id: MachineId) =>
   Atom.make(
     AsyncResult.success({
       authenticated: true,

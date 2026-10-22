@@ -273,7 +273,7 @@ const supportsServerResolvedCommandContext = Effect.fn(
   "EnvironmentCommands.supportsServerResolvedCommandContext",
 )(function* () {
   const config = yield* getInitialServerConfig();
-  return config.environment.capabilities.serverResolvedCommandContext === true;
+  return config.machine.capabilities.serverResolvedCommandContext === true;
 });
 
 const persistAttachments = Effect.fn("EnvironmentCommands.persistAttachments")(function* (
@@ -806,7 +806,7 @@ export const interruptThreadTurn = Effect.fn("EnvironmentCommands.interruptThrea
     threadId === input.threadId ? (input.runId ?? (input.turnId as RunId | undefined)) : undefined;
   if (runId === undefined) {
     const config = yield* getInitialServerConfig();
-    if (config.environment.capabilities.threadStop === true) {
+    if (config.machine.capabilities.threadStop === true) {
       // A paginated projection can omit commands still running from earlier turns.
       return yield* dispatch({
         type: "thread.stop",

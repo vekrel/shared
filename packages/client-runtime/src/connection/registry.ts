@@ -1,4 +1,4 @@
-import { EnvironmentId } from "@vekrel/contracts";
+import { MachineId } from "@vekrel/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -73,22 +73,22 @@ function unsupportedState(
 export class EnvironmentNotRegisteredError extends Schema.TaggedError<EnvironmentNotRegisteredError>()(
   "EnvironmentNotRegisteredError",
   {
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   },
 ) {
   override get message(): string {
-    return `Environment ${this.environmentId} is not registered.`;
+    return `Machine ${this.machineId} is not registered.`;
   }
 }
 
 export class PlatformEnvironmentRemovalError extends Schema.TaggedError<PlatformEnvironmentRemovalError>()(
   "PlatformEnvironmentRemovalError",
   {
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   },
 ) {
   override get message(): string {
-    return `Platform-managed environment ${this.environmentId} cannot be removed.`;
+    return `Platform-managed machine ${this.machineId} cannot be removed.`;
   }
 }
 
@@ -96,12 +96,12 @@ export class EnvironmentRegistry extends Context.Service<
   EnvironmentRegistry,
   {
     readonly entries: SubscriptionRef.SubscriptionRef<
-      ReadonlyMap<EnvironmentId, ConnectionCatalogEntry>
+      ReadonlyMap<MachineId, ConnectionCatalogEntry>
     >;
     readonly networkStatus: SubscriptionRef.SubscriptionRef<NetworkStatus>;
     readonly start: Effect.Effect<void>;
     /**
-     * Succeeds with `false` and changes nothing when the environment is
+     * Succeeds with `false` and changes nothing when the machine is
      * platform-managed, since the host owns that entry.
      */
     readonly register: (
@@ -112,7 +112,7 @@ export class EnvironmentRegistry extends Context.Service<
       registrations: ReadonlyArray<PlatformConnectionRegistration>,
     ) => Effect.Effect<void>;
     readonly remove: (
-      environmentId: EnvironmentId,
+      machineId: MachineId,
     ) => Effect.Effect<
       void,
       | Persistence.ConnectionPersistenceError
@@ -121,11 +121,11 @@ export class EnvironmentRegistry extends Context.Service<
       | PlatformEnvironmentRemovalError
     >;
     /**
-     * Removing an environment's last route removes the environment, the same as
+     * Removing a machine's last route removes the machine, the same as
      * `remove`.
      */
     readonly removeRoute: (
-      environmentId: EnvironmentId,
+      machineId: MachineId,
       routeId: string,
     ) => Effect.Effect<
       void,
@@ -135,7 +135,7 @@ export class EnvironmentRegistry extends Context.Service<
       | PlatformEnvironmentRemovalError
     >;
     readonly reorderRoutes: (
-      environmentId: EnvironmentId,
+      machineId: MachineId,
       routeIds: ReadonlyArray<string>,
     ) => Effect.Effect<
       void,
@@ -144,15 +144,15 @@ export class EnvironmentRegistry extends Context.Service<
       | PlatformEnvironmentRemovalError
       | ConnectionBlockedError
     >;
-    readonly removeRelayEnvironments: () => Effect.Effect<
+    readonly removeRelayMachines: () => Effect.Effect<
       void,
       | Persistence.ConnectionPersistenceError
       | ConnectionAttemptError
       | PlatformEnvironmentRemovalError
     >;
-    readonly retryNow: (environmentId: EnvironmentId) => Effect.Effect<void>;
+    readonly retryNow: (machineId: MachineId) => Effect.Effect<void>;
     readonly setEnabled: (
-      environmentId: EnvironmentId,
+      machineId: MachineId,
       enabled: boolean,
     ) => Effect.Effect<
       void,
@@ -161,17 +161,17 @@ export class EnvironmentRegistry extends Context.Service<
       | ConnectionBlockedError
     >;
     readonly setCompatibility: (
-      environmentId: EnvironmentId,
+      machineId: MachineId,
       error: ConnectionBlockedError | null,
     ) => Effect.Effect<void, Persistence.ConnectionPersistenceError>;
     readonly state: (
-      environmentId: EnvironmentId,
+      machineId: MachineId,
     ) => Effect.Effect<SupervisorConnectionState, EnvironmentNotRegisteredError>;
     readonly stateChanges: (
-      environmentId: EnvironmentId,
+      machineId: MachineId,
     ) => Stream.Stream<SupervisorConnectionState, EnvironmentNotRegisteredError>;
     readonly run: <A, E, R>(
-      environmentId: EnvironmentId,
+      machineId: MachineId,
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<
       A,
@@ -179,7 +179,7 @@ export class EnvironmentRegistry extends Context.Service<
       Exclude<R, EnvironmentSupervisor.EnvironmentSupervisor>
     >;
     readonly runStream: <A, E, R>(
-      environmentId: EnvironmentId,
+      machineId: MachineId,
       stream: Stream.Stream<A, E, R>,
     ) => Stream.Stream<
       A,
@@ -187,7 +187,7 @@ export class EnvironmentRegistry extends Context.Service<
       Exclude<R, EnvironmentSupervisor.EnvironmentSupervisor>
     >;
     readonly followStream: <A, E, R>(
-      environmentId: EnvironmentId,
+      machineId: MachineId,
       stream: Stream.Stream<A, E, R>,
     ) => Stream.Stream<A, E, Exclude<R, EnvironmentSupervisor.EnvironmentSupervisor>>;
   }
@@ -212,9 +212,9 @@ export const make = Effect.gen(function* () {
   const connectivity = yield* Connectivity.Connectivity;
   const driver = yield* ConnectionDriver.ConnectionDriver;
   const wakeups = yield* ConnectionWakeups.ConnectionWakeups;
-  const ssh = yield* ClientCapabilities.SshEnvironmentGateway;
+  const ssh = yield* ClientCapabilities.SshMachineGateway;
   const persistedTargets = yield* storage.list;
-  const disabledEnvironmentIds = new Set(yield* storage.listDisabled);
+  const disabledMachineIds = new Set(yield* storage.listDisabled);
   const loadRoute = Effect.fn("EnvironmentRegistry.loadRoute")(function* (
     target: ConnectionTarget,
   ) {
@@ -224,16 +224,16 @@ export const make = Effect.gen(function* () {
         : Option.none();
     return { target, profile } satisfies ConnectionRoute;
   });
-  const persistedRoutesByEnvironment = new Map<EnvironmentId, Array<ConnectionTarget>>();
+  const persistedRoutesByEnvironment = new Map<MachineId, Array<ConnectionTarget>>();
   for (const target of persistedTargets) {
-    const routes = persistedRoutesByEnvironment.get(target.environmentId) ?? [];
+    const routes = persistedRoutesByEnvironment.get(target.machineId) ?? [];
     routes.push(target);
-    persistedRoutesByEnvironment.set(target.environmentId, routes);
+    persistedRoutesByEnvironment.set(target.machineId, routes);
   }
   const initialEntries = new Map(
     yield* Effect.forEach(
       persistedRoutesByEnvironment,
-      Effect.fn("EnvironmentRegistry.loadCatalogEntry")(function* ([environmentId, targets]) {
+      Effect.fn("EnvironmentRegistry.loadCatalogEntry")(function* ([machineId, targets]) {
         const loaded = yield* Effect.forEach(targets, loadRoute, { concurrency: "unbounded" });
         const seen = new Set<string>();
         const usable = loaded.filter((route) => {
@@ -245,12 +245,12 @@ export const make = Effect.gen(function* () {
         const routes = usable.length > 0 ? usable : loaded.slice(0, 1);
         const first = routes[0]!;
         return [
-          environmentId,
+          machineId,
           entryWithRoutes(
             {
               target: first.target,
               profile: first.profile,
-              enabled: !disabledEnvironmentIds.has(environmentId),
+              enabled: !disabledMachineIds.has(machineId),
             },
             routes,
           ),
@@ -260,13 +260,13 @@ export const make = Effect.gen(function* () {
     ),
   );
   const entries =
-    yield* SubscriptionRef.make<ReadonlyMap<EnvironmentId, ConnectionCatalogEntry>>(initialEntries);
+    yield* SubscriptionRef.make<ReadonlyMap<MachineId, ConnectionCatalogEntry>>(initialEntries);
   const networkStatus = yield* SubscriptionRef.make(yield* connectivity.status);
   const serviceScopes = yield* SubscriptionRef.make<
-    ReadonlyMap<EnvironmentId, EnvironmentServiceScope>
+    ReadonlyMap<MachineId, EnvironmentServiceScope>
   >(new Map());
-  const platformEnvironmentIds = yield* Ref.make<ReadonlySet<EnvironmentId>>(new Set());
-  const persistedEnvironmentIds = yield* Ref.make<ReadonlySet<EnvironmentId>>(
+  const platformMachineIds = yield* Ref.make<ReadonlySet<MachineId>>(new Set());
+  const persistedMachineIds = yield* Ref.make<ReadonlySet<MachineId>>(
     new Set(persistedRoutesByEnvironment.keys()),
   );
   interface LeaseLock {
@@ -274,23 +274,23 @@ export const make = Effect.gen(function* () {
     readonly users: number;
   }
 
-  const leaseLocks = yield* Ref.make<ReadonlyMap<EnvironmentId, LeaseLock>>(new Map());
+  const leaseLocks = yield* Ref.make<ReadonlyMap<MachineId, LeaseLock>>(new Map());
   const leaseLocksGuard = yield* Semaphore.make(1);
   const started = yield* Ref.make(false);
 
   const withLeaseLock = <A, E, R>(
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E, R> =>
     Effect.acquireUseRelease(
       leaseLocksGuard.withPermits(1)(
         Effect.gen(function* () {
           const current = yield* Ref.get(leaseLocks);
-          const existing = current.get(environmentId);
+          const existing = current.get(machineId);
           if (existing !== undefined) {
             yield* Ref.set(
               leaseLocks,
-              new Map(current).set(environmentId, {
+              new Map(current).set(machineId, {
                 semaphore: existing.semaphore,
                 users: existing.users + 1,
               }),
@@ -298,7 +298,7 @@ export const make = Effect.gen(function* () {
             return existing.semaphore;
           }
           const semaphore = yield* Semaphore.make(1);
-          yield* Ref.set(leaseLocks, new Map(current).set(environmentId, { semaphore, users: 1 }));
+          yield* Ref.set(leaseLocks, new Map(current).set(machineId, { semaphore, users: 1 }));
           return semaphore;
         }),
       ),
@@ -306,15 +306,15 @@ export const make = Effect.gen(function* () {
       (semaphore) =>
         leaseLocksGuard.withPermits(1)(
           Ref.update(leaseLocks, (current) => {
-            const existing = current.get(environmentId);
+            const existing = current.get(machineId);
             if (existing === undefined || existing.semaphore !== semaphore) {
               return current;
             }
             const next = new Map(current);
             if (existing.users === 1) {
-              next.delete(environmentId);
+              next.delete(machineId);
             } else {
-              next.set(environmentId, {
+              next.set(machineId, {
                 semaphore,
                 users: existing.users - 1,
               });
@@ -325,27 +325,27 @@ export const make = Effect.gen(function* () {
     ).pipe(Effect.withSpan("EnvironmentRegistry.withLeaseLock"));
 
   const getEntry = Effect.fn("EnvironmentRegistry.getEntry")(function* (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   ) {
-    const entry = (yield* SubscriptionRef.get(entries)).get(environmentId);
+    const entry = (yield* SubscriptionRef.get(entries)).get(machineId);
     if (entry === undefined) {
       return yield* new EnvironmentNotRegisteredError({
-        environmentId,
+        machineId,
       });
     }
     return entry;
   });
 
   const closeServiceScope = Effect.fn("EnvironmentRegistry.closeServiceScope")(function* (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   ) {
     const current = yield* SubscriptionRef.get(serviceScopes);
-    const lease = current.get(environmentId);
+    const lease = current.get(machineId);
     if (lease === undefined) {
       return;
     }
     const next = new Map(current);
-    next.delete(environmentId);
+    next.delete(machineId);
     yield* SubscriptionRef.set(serviceScopes, next);
     yield* Scope.close(lease.scope, Exit.void);
   });
@@ -354,13 +354,13 @@ export const make = Effect.gen(function* () {
     (entry: ConnectionCatalogEntry) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          const environmentId = entry.target.environmentId;
+          const machineId = entry.target.machineId;
           const scope = yield* Scope.fork(registryScope);
           const supervisor = yield* EnvironmentSupervisor.make(entry, {
             // Seed the intent to avoid publishing a false switched-off state
-            // before an enabled, compatible environment starts connecting.
+            // before an enabled, compatible machine starts connecting.
             initiallyDesired: entry.enabled && entry.unsupportedReason === undefined,
-            learnRoutes: (input) => learnRoutes({ environmentId, ...input }),
+            learnRoutes: (input) => learnRoutes({ machineId, ...input }),
           }).pipe(
             Effect.provideService(Connectivity.Connectivity, connectivity),
             Effect.provideService(ConnectionDriver.ConnectionDriver, driver),
@@ -370,13 +370,13 @@ export const make = Effect.gen(function* () {
           );
           yield* SubscriptionRef.update(serviceScopes, (current) => {
             const next = new Map(current);
-            next.set(environmentId, { entry, supervisor, scope });
+            next.set(machineId, { entry, supervisor, scope });
             return next;
           });
           yield* SubscriptionRef.changes(supervisor.state).pipe(
             Stream.runForEach((state) =>
               state.phase === "blocked" && state.lastFailure?.reason === "unsupported"
-                ? setCompatibility(environmentId, state.lastFailure)
+                ? setCompatibility(machineId, state.lastFailure)
                 : Effect.void,
             ),
             Effect.forkIn(scope),
@@ -387,18 +387,18 @@ export const make = Effect.gen(function* () {
   );
 
   const acquireSupervisor = Effect.fn("EnvironmentRegistry.acquireSupervisor")(function* (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   ) {
     return yield* withLeaseLock(
-      environmentId,
+      machineId,
       Effect.gen(function* () {
-        const entry = yield* getEntry(environmentId);
-        const existing = (yield* SubscriptionRef.get(serviceScopes)).get(environmentId);
+        const entry = yield* getEntry(machineId);
+        const existing = (yield* SubscriptionRef.get(serviceScopes)).get(machineId);
         if (existing !== undefined) {
           if (Equal.equals(existing.entry, entry)) {
             return existing.supervisor;
           }
-          yield* closeServiceScope(environmentId);
+          yield* closeServiceScope(machineId);
         }
         return yield* createServiceScope(entry);
       }),
@@ -406,8 +406,8 @@ export const make = Effect.gen(function* () {
   });
 
   const run: EnvironmentRegistry["Service"]["run"] = Effect.fn("EnvironmentRegistry.run")(
-    function* <A, E, R>(environmentId: EnvironmentId, effect: Effect.Effect<A, E, R>) {
-      const supervisor = yield* acquireSupervisor(environmentId);
+    function* <A, E, R>(machineId: MachineId, effect: Effect.Effect<A, E, R>) {
+      const supervisor = yield* acquireSupervisor(machineId);
       return yield* Effect.provideService(
         effect,
         EnvironmentSupervisor.EnvironmentSupervisor,
@@ -417,11 +417,11 @@ export const make = Effect.gen(function* () {
   );
 
   const runStream: EnvironmentRegistry["Service"]["runStream"] = <A, E, R>(
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     stream: Stream.Stream<A, E, R>,
   ) =>
     Stream.unwrap(
-      acquireSupervisor(environmentId).pipe(
+      acquireSupervisor(machineId).pipe(
         Effect.map((supervisor) =>
           Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
         ),
@@ -429,14 +429,14 @@ export const make = Effect.gen(function* () {
     );
 
   const followStream: EnvironmentRegistry["Service"]["followStream"] = <A, E, R>(
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     stream: Stream.Stream<A, E, R>,
   ) =>
     Stream.concat(
       Stream.fromEffect(SubscriptionRef.get(entries)),
       SubscriptionRef.changes(entries),
     ).pipe(
-      Stream.map((current) => Option.fromUndefinedOr(current.get(environmentId))),
+      Stream.map((current) => Option.fromUndefinedOr(current.get(machineId))),
       Stream.changesWith(
         (previous, current) => Option.getOrNull(previous) === Option.getOrNull(current),
       ),
@@ -445,7 +445,7 @@ export const make = Effect.gen(function* () {
           onNone: () => Stream.empty,
           onSome: () =>
             Stream.unwrap(
-              acquireSupervisor(environmentId).pipe(
+              acquireSupervisor(machineId).pipe(
                 Effect.match({
                   onFailure: () => Stream.empty,
                   onSuccess: (supervisor) =>
@@ -467,8 +467,8 @@ export const make = Effect.gen(function* () {
     }
     yield* Effect.forEach(
       persistedRoutesByEnvironment.keys(),
-      (environmentId) =>
-        acquireSupervisor(environmentId).pipe(
+      (machineId) =>
+        acquireSupervisor(machineId).pipe(
           Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }),
         ),
       {
@@ -483,8 +483,8 @@ export const make = Effect.gen(function* () {
     options?: { readonly retainEquivalentRuntime?: boolean },
   ) {
     const target = entry.target;
-    const previous = (yield* SubscriptionRef.get(entries)).get(target.environmentId);
-    const existingScope = (yield* SubscriptionRef.get(serviceScopes)).get(target.environmentId);
+    const previous = (yield* SubscriptionRef.get(entries)).get(target.machineId);
+    const existingScope = (yield* SubscriptionRef.get(serviceScopes)).get(target.machineId);
     if (
       options?.retainEquivalentRuntime === true &&
       previous !== undefined &&
@@ -495,20 +495,20 @@ export const make = Effect.gen(function* () {
       return;
     }
 
-    yield* closeServiceScope(target.environmentId);
+    yield* closeServiceScope(target.machineId);
     yield* SubscriptionRef.update(entries, (current) => {
       const next = new Map(current);
-      next.set(target.environmentId, entry);
+      next.set(target.machineId, entry);
       return next;
     });
     yield* createServiceScope(entry);
   });
 
   const forgetRoutingTrust = (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     operation: "register-connection" | "set-connection-routes",
   ) =>
-    githubRoutingPermissions.forget(environmentId).pipe(
+    githubRoutingPermissions.forget(machineId).pipe(
       Effect.mapError(
         (error) =>
           new Persistence.ConnectionPersistenceError({
@@ -538,14 +538,14 @@ export const make = Effect.gen(function* () {
     registration: ConnectionRegistration,
   ) {
     const registered = connectionRegistrationCatalogEntry(registration);
-    const environmentId = registered.target.environmentId;
+    const machineId = registered.target.machineId;
     return yield* withLeaseLock(
-      environmentId,
+      machineId,
       Effect.gen(function* () {
-        if ((yield* Ref.get(platformEnvironmentIds)).has(environmentId)) {
+        if ((yield* Ref.get(platformMachineIds)).has(machineId)) {
           return false;
         }
-        const previous = (yield* SubscriptionRef.get(entries)).get(environmentId);
+        const previous = (yield* SubscriptionRef.get(entries)).get(machineId);
         let entry = registered;
         if (previous !== undefined) {
           const route: ConnectionRoute = { target: registered.target, profile: registered.profile };
@@ -558,13 +558,13 @@ export const make = Effect.gen(function* () {
           );
           const next = withRoutes(previous, upsertRoute(routes, route));
           if (next.addressesChanged) {
-            yield* forgetRoutingTrust(environmentId, "register-connection");
+            yield* forgetRoutingTrust(machineId, "register-connection");
           }
           entry = next.entry;
         }
         yield* registrations.register(registration, persistedRoutes(entry));
-        yield* Ref.update(persistedEnvironmentIds, (current) =>
-          new Set(current).add(environmentId),
+        yield* Ref.update(persistedMachineIds, (current) =>
+          new Set(current).add(machineId),
         );
         yield* installEntryLocked(entry);
         return true;
@@ -576,22 +576,22 @@ export const make = Effect.gen(function* () {
     previous: ConnectionCatalogEntry,
     routes: ReadonlyArray<ConnectionRoute>,
   ) {
-    const environmentId = previous.target.environmentId;
+    const machineId = previous.target.machineId;
     const next = withRoutes(previous, routes);
     if (next.addressesChanged) {
-      yield* forgetRoutingTrust(environmentId, "set-connection-routes");
+      yield* forgetRoutingTrust(machineId, "set-connection-routes");
     }
-    yield* registrations.setRoutes(environmentId, persistedRoutes(next.entry));
+    yield* registrations.setRoutes(machineId, persistedRoutes(next.entry));
     yield* installEntryLocked(next.entry);
   });
 
   const userEntry = Effect.fn("EnvironmentRegistry.userEntry")(function* (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   ) {
-    if ((yield* Ref.get(platformEnvironmentIds)).has(environmentId)) {
-      return yield* new PlatformEnvironmentRemovalError({ environmentId });
+    if ((yield* Ref.get(platformMachineIds)).has(machineId)) {
+      return yield* new PlatformEnvironmentRemovalError({ machineId });
     }
-    return yield* getEntry(environmentId);
+    return yield* getEntry(machineId);
   });
 
   const installPlatformRegistration = Effect.fn("EnvironmentRegistry.installPlatformRegistration")(
@@ -599,26 +599,26 @@ export const make = Effect.gen(function* () {
       const registered = connectionRegistrationCatalogEntry(registration);
       const target = registered.target;
       yield* withLeaseLock(
-        target.environmentId,
+        target.machineId,
         Effect.gen(function* () {
-          const previous = (yield* SubscriptionRef.get(entries)).get(target.environmentId);
+          const previous = (yield* SubscriptionRef.get(entries)).get(target.machineId);
           const entry: ConnectionCatalogEntry =
             previous?.unsupportedReason !== undefined &&
             gitHubRoutingConnectionKey(previous) === gitHubRoutingConnectionKey(registered)
               ? { ...registered, ...unsupportedState(previous) }
               : registered;
-          const persisted = (yield* Ref.get(persistedEnvironmentIds)).has(target.environmentId);
+          const persisted = (yield* Ref.get(persistedMachineIds)).has(target.machineId);
           if (
             persisted ||
             (previous !== undefined &&
               gitHubRoutingConnectionKey(previous) !== gitHubRoutingConnectionKey(entry))
           ) {
-            const revoked = yield* githubRoutingPermissions.forget(target.environmentId).pipe(
+            const revoked = yield* githubRoutingPermissions.forget(target.machineId).pipe(
               Effect.tapError((error) =>
                 Effect.logWarning(
-                  "Could not clear GitHub routing permission for a platform environment.",
+                  "Could not clear GitHub routing permission for a platform machine.",
                   {
-                    environmentId: target.environmentId,
+                    machineId: target.machineId,
                     error,
                   },
                 ),
@@ -627,9 +627,9 @@ export const make = Effect.gen(function* () {
             );
             if (Exit.isFailure(revoked)) return;
           }
-          yield* Ref.update(platformEnvironmentIds, (current) => {
+          yield* Ref.update(platformMachineIds, (current) => {
             const next = new Set(current);
-            next.add(target.environmentId);
+            next.add(target.machineId);
             return next;
           });
 
@@ -652,7 +652,7 @@ export const make = Effect.gen(function* () {
                 Effect.as(changed),
                 Effect.catch((error) =>
                   Effect.logWarning("Could not store the platform bearer credential.", {
-                    environmentId: target.environmentId,
+                    machineId: target.machineId,
                     error,
                   }).pipe(Effect.as(false)),
                 ),
@@ -660,19 +660,19 @@ export const make = Effect.gen(function* () {
           }
 
           if (persisted) {
-            yield* registrations.remove(target.environmentId).pipe(
+            yield* registrations.remove(target.machineId).pipe(
               Effect.tap(() =>
-                Ref.update(persistedEnvironmentIds, (current) => {
+                Ref.update(persistedMachineIds, (current) => {
                   const next = new Set(current);
-                  next.delete(target.environmentId);
+                  next.delete(target.machineId);
                   return next;
                 }),
               ),
               Effect.catch((error) =>
                 Effect.logWarning(
-                  "Could not remove a persisted registration shadowed by a platform environment.",
+                  "Could not remove a persisted registration shadowed by a platform machine.",
                   {
-                    environmentId: target.environmentId,
+                    machineId: target.machineId,
                     error,
                   },
                 ),
@@ -683,7 +683,7 @@ export const make = Effect.gen(function* () {
           yield* installEntryLocked(entry, { retainEquivalentRuntime: true });
 
           if (bearerReplaced && registration._tag === "BearerConnectionRegistration") {
-            const scope = (yield* SubscriptionRef.get(serviceScopes)).get(target.environmentId);
+            const scope = (yield* SubscriptionRef.get(serviceScopes)).get(target.machineId);
             if (scope !== undefined) {
               const state = yield* SubscriptionRef.get(scope.supervisor.state);
               if (
@@ -720,17 +720,17 @@ export const make = Effect.gen(function* () {
   );
 
   const removePlatformEnvironment = Effect.fn("EnvironmentRegistry.removePlatformEnvironment")(
-    function* (environmentId: EnvironmentId) {
+    function* (machineId: MachineId) {
       yield* withLeaseLock(
-        environmentId,
+        machineId,
         Effect.gen(function* () {
-          const entry = (yield* SubscriptionRef.get(entries)).get(environmentId);
-          const revoked = yield* githubRoutingPermissions.forget(environmentId).pipe(
+          const entry = (yield* SubscriptionRef.get(entries)).get(machineId);
+          const revoked = yield* githubRoutingPermissions.forget(machineId).pipe(
             Effect.tapError((error) =>
               Effect.logWarning(
                 "Could not clear GitHub routing permission after platform removal.",
                 {
-                  environmentId,
+                  machineId,
                   error,
                 },
               ),
@@ -738,22 +738,22 @@ export const make = Effect.gen(function* () {
             Effect.exit,
           );
           if (Exit.isFailure(revoked)) return;
-          yield* Ref.update(platformEnvironmentIds, (current) => {
+          yield* Ref.update(platformMachineIds, (current) => {
             const next = new Set(current);
-            next.delete(environmentId);
+            next.delete(machineId);
             return next;
           });
-          yield* closeServiceScope(environmentId);
+          yield* closeServiceScope(machineId);
           yield* SubscriptionRef.update(entries, (current) => {
             const next = new Map(current);
-            next.delete(environmentId);
+            next.delete(machineId);
             return next;
           });
           if (entry !== undefined && entry.target._tag === "BearerConnectionTarget") {
             yield* credentials.remove(entry.target.connectionId).pipe(
               Effect.catch((error) =>
                 Effect.logWarning("Could not clear the platform bearer credential.", {
-                  environmentId,
+                  machineId,
                   error,
                 }),
               ),
@@ -761,15 +761,15 @@ export const make = Effect.gen(function* () {
           }
           yield* Effect.all(
             [
-              cache.clear(environmentId).pipe(
+              cache.clear(machineId).pipe(
                 Effect.catch((error) =>
-                  Effect.logWarning("Could not clear cached environment data after removal.", {
-                    environmentId,
+                  Effect.logWarning("Could not clear cached machine data after removal.", {
+                    machineId,
                     error,
                   }),
                 ),
               ),
-              ownedDataCleanup.clear(environmentId),
+              ownedDataCleanup.clear(machineId),
             ],
             { concurrency: "unbounded", discard: true },
           );
@@ -788,13 +788,13 @@ export const make = Effect.gen(function* () {
     platformRegistrations: ReadonlyArray<PlatformConnectionRegistration>,
   ) {
     const desiredIds = new Set(
-      platformRegistrations.map((registration) => registration.target.environmentId),
+      platformRegistrations.map((registration) => registration.target.machineId),
     );
-    const currentPlatformIds = yield* Ref.get(platformEnvironmentIds);
+    const currentPlatformIds = yield* Ref.get(platformMachineIds);
     yield* Effect.forEach(
       currentPlatformIds,
-      (environmentId) =>
-        desiredIds.has(environmentId) ? Effect.void : removePlatformEnvironment(environmentId),
+      (machineId) =>
+        desiredIds.has(machineId) ? Effect.void : removePlatformEnvironment(machineId),
       { discard: true },
     );
     yield* Effect.forEach(platformRegistrations, installPlatformRegistration, { discard: true });
@@ -802,39 +802,39 @@ export const make = Effect.gen(function* () {
 
   /** Callers hold its lease lock. */
   const removeLocked = Effect.fn("EnvironmentRegistry.removeLocked")(function* (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
   ) {
-    if ((yield* Ref.get(platformEnvironmentIds)).has(environmentId)) {
+    if ((yield* Ref.get(platformMachineIds)).has(machineId)) {
       return yield* new PlatformEnvironmentRemovalError({
-        environmentId,
+        machineId,
       });
     }
-    const entry = yield* getEntry(environmentId);
+    const entry = yield* getEntry(machineId);
 
-    yield* githubRoutingPermissions.forget(environmentId);
-    yield* registrations.remove(environmentId);
-    yield* Ref.update(persistedEnvironmentIds, (current) => {
+    yield* githubRoutingPermissions.forget(machineId);
+    yield* registrations.remove(machineId);
+    yield* Ref.update(persistedMachineIds, (current) => {
       const next = new Set(current);
-      next.delete(environmentId);
+      next.delete(machineId);
       return next;
     });
-    yield* closeServiceScope(environmentId);
+    yield* closeServiceScope(machineId);
     yield* SubscriptionRef.update(entries, (current) => {
       const next = new Map(current);
-      next.delete(environmentId);
+      next.delete(machineId);
       return next;
     });
     yield* Effect.all(
       [
-        cache.clear(environmentId).pipe(
+        cache.clear(machineId).pipe(
           Effect.catch((error) =>
-            Effect.logWarning("Could not clear cached environment data after removal.", {
-              environmentId,
+            Effect.logWarning("Could not clear cached machine data after removal.", {
+              machineId,
               error,
             }),
           ),
         ),
-        ownedDataCleanup.clear(environmentId),
+        ownedDataCleanup.clear(machineId),
       ],
       { concurrency: "unbounded", discard: true },
     );
@@ -842,20 +842,20 @@ export const make = Effect.gen(function* () {
     for (const route of connectionRoutes(entry)) {
       const profile = Option.getOrNull(route.profile);
       if (profile !== null && isSshConnectionProfile(profile)) {
-        yield* disconnectSsh(environmentId, profile);
+        yield* disconnectSsh(machineId, profile);
       }
     }
   });
 
-  const remove = Effect.fn("EnvironmentRegistry.remove")(function* (environmentId: EnvironmentId) {
-    return yield* withLeaseLock(environmentId, removeLocked(environmentId));
+  const remove = Effect.fn("EnvironmentRegistry.remove")(function* (machineId: MachineId) {
+    return yield* withLeaseLock(machineId, removeLocked(machineId));
   });
 
-  const disconnectSsh = (environmentId: EnvironmentId, profile: SshConnectionProfile) =>
+  const disconnectSsh = (machineId: MachineId, profile: SshConnectionProfile) =>
     ssh.disconnect(profile.target).pipe(
       Effect.tapError((error) =>
-        Effect.logWarning("Could not disconnect the managed SSH environment.", {
-          environmentId,
+        Effect.logWarning("Could not disconnect the managed SSH machine.", {
+          machineId,
           error,
         }),
       ),
@@ -871,17 +871,17 @@ export const make = Effect.gen(function* () {
    * trust the way a newly paired address does.
    */
   const learnRoutes = Effect.fn("EnvironmentRegistry.learnRoutes")(function* (input: {
-    readonly environmentId: EnvironmentId;
+    readonly machineId: MachineId;
     readonly activeRoute: ConnectionRoute;
     readonly reported: ReadonlyArray<ReportedEndpoint>;
   }) {
     return yield* withLeaseLock(
-      input.environmentId,
+      input.machineId,
       Effect.gen(function* () {
-        if ((yield* Ref.get(platformEnvironmentIds)).has(input.environmentId)) {
+        if ((yield* Ref.get(platformMachineIds)).has(input.machineId)) {
           return Option.none<ConnectionCatalogEntry>();
         }
-        const entry = (yield* SubscriptionRef.get(entries)).get(input.environmentId);
+        const entry = (yield* SubscriptionRef.get(entries)).get(input.machineId);
         if (entry === undefined) return Option.none<ConnectionCatalogEntry>();
         const routes = mergeLearnedRoutes({
           entry,
@@ -907,22 +907,22 @@ export const make = Effect.gen(function* () {
           }
           yield* profiles.put(profile);
         }
-        yield* registrations.setRoutes(input.environmentId, persistedRoutes(next));
-        const lease = (yield* SubscriptionRef.get(serviceScopes)).get(input.environmentId);
+        yield* registrations.setRoutes(input.machineId, persistedRoutes(next));
+        const lease = (yield* SubscriptionRef.get(serviceScopes)).get(input.machineId);
         if (lease !== undefined) {
           yield* SubscriptionRef.update(serviceScopes, (current) =>
-            new Map(current).set(input.environmentId, { ...lease, entry: next }),
+            new Map(current).set(input.machineId, { ...lease, entry: next }),
           );
         }
         yield* SubscriptionRef.update(entries, (current) =>
-          new Map(current).set(input.environmentId, next),
+          new Map(current).set(input.machineId, next),
         );
         return Option.some(next);
       }),
     ).pipe(
       Effect.catch((error) =>
-        Effect.logWarning("Could not save routes learned from the environment.", {
-          environmentId: input.environmentId,
+        Effect.logWarning("Could not save routes learned from the machine.", {
+          machineId: input.machineId,
           error,
         }).pipe(Effect.as(Option.none<ConnectionCatalogEntry>())),
       ),
@@ -930,37 +930,37 @@ export const make = Effect.gen(function* () {
   });
 
   const removeRoute = Effect.fn("EnvironmentRegistry.removeRoute")(function* (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     routeId: string,
   ) {
     // One lock for the whole decision: a route registered between "this was
     // the last route" and the removal must not be deleted with it.
     yield* withLeaseLock(
-      environmentId,
+      machineId,
       Effect.gen(function* () {
-        const entry = yield* userEntry(environmentId);
+        const entry = yield* userEntry(machineId);
         const routes = connectionRoutes(entry);
         const route = routes.find((candidate) => connectionRouteId(candidate.target) === routeId);
         if (route === undefined) return;
         const remaining = routesAfterRemoving(routes, routeId);
-        if (remaining.length === 0) return yield* removeLocked(environmentId);
+        if (remaining.length === 0) return yield* removeLocked(machineId);
         yield* replaceRoutesLocked(entry, remaining);
         const profile = Option.getOrNull(route.profile);
         if (profile !== null && isSshConnectionProfile(profile)) {
-          yield* disconnectSsh(environmentId, profile);
+          yield* disconnectSsh(machineId, profile);
         }
       }),
     );
   });
 
   const reorderRoutes = Effect.fn("EnvironmentRegistry.reorderRoutes")(function* (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     routeIds: ReadonlyArray<string>,
   ) {
     yield* withLeaseLock(
-      environmentId,
+      machineId,
       Effect.gen(function* () {
-        const entry = yield* userEntry(environmentId);
+        const entry = yield* userEntry(machineId);
         const routes = connectionRoutes(entry);
         const byId = new Map(routes.map((route) => [connectionRouteId(route.target), route]));
         const reordered = routeIds.flatMap((id) => byId.get(id) ?? []);
@@ -976,18 +976,18 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const removeRelayEnvironments = Effect.fn("EnvironmentRegistry.removeRelayEnvironments")(
+  const removeRelayMachines = Effect.fn("EnvironmentRegistry.removeRelayMachines")(
     function* () {
-      const relayEnvironmentIds = [...(yield* SubscriptionRef.get(entries)).values()]
+      const relayMachineIds = [...(yield* SubscriptionRef.get(entries)).values()]
         .filter((entry) =>
           connectionRoutes(entry).some((route) => route.target._tag === "RelayConnectionTarget"),
         )
-        .map((entry) => entry.target.environmentId);
+        .map((entry) => entry.target.machineId);
 
       yield* Effect.forEach(
-        relayEnvironmentIds,
-        (environmentId) =>
-          removeRoute(environmentId, RELAY_ROUTE_ID).pipe(
+        relayMachineIds,
+        (machineId) =>
+          removeRoute(machineId, RELAY_ROUTE_ID).pipe(
             Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }),
           ),
         {
@@ -998,20 +998,20 @@ export const make = Effect.gen(function* () {
     },
   );
 
-  const retryNow = (environmentId: EnvironmentId) =>
-    acquireSupervisor(environmentId).pipe(
+  const retryNow = (machineId: MachineId) =>
+    acquireSupervisor(machineId).pipe(
       Effect.flatMap((supervisor) => supervisor.retryNow),
       Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }),
       Effect.withSpan("EnvironmentRegistry.retryNow"),
     );
   const setEnabled = Effect.fn("EnvironmentRegistry.setEnabled")(function* (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     enabled: boolean,
   ) {
     yield* withLeaseLock(
-      environmentId,
+      machineId,
       Effect.gen(function* () {
-        const entry = yield* getEntry(environmentId);
+        const entry = yield* getEntry(machineId);
         const retryUnsupported = enabled && entry.unsupportedReason !== undefined;
         if (retryUnsupported && !hasSavedBearerRoute(entry)) {
           return yield* new ConnectionBlockedError({
@@ -1022,25 +1022,25 @@ export const make = Effect.gen(function* () {
         if (entry.enabled === enabled && !retryUnsupported) {
           return;
         }
-        if (!(yield* Ref.get(platformEnvironmentIds)).has(environmentId)) {
-          yield* registrations.setEnabled(environmentId, enabled);
+        if (!(yield* Ref.get(platformMachineIds)).has(machineId)) {
+          yield* registrations.setEnabled(machineId, enabled);
         }
         // A cached rejection can outlive a server update.
         const { unsupportedReason: _reason, serverUpdateRequired: _update, ...rest } = entry;
         const next: ConnectionCatalogEntry = { ...(retryUnsupported ? rest : entry), enabled };
         // Update the lease in place so the supervisor keeps its generation and
         // durable streams; `installEntryLocked` would tear it down instead.
-        const lease = (yield* SubscriptionRef.get(serviceScopes)).get(environmentId);
+        const lease = (yield* SubscriptionRef.get(serviceScopes)).get(machineId);
         if (lease !== undefined) {
           yield* SubscriptionRef.update(serviceScopes, (current) => {
             const nextScopes = new Map(current);
-            nextScopes.set(environmentId, { ...lease, entry: next });
+            nextScopes.set(machineId, { ...lease, entry: next });
             return nextScopes;
           });
         }
         yield* SubscriptionRef.update(entries, (current) => {
           const nextEntries = new Map(current);
-          nextEntries.set(environmentId, next);
+          nextEntries.set(machineId, next);
           return nextEntries;
         });
         if (lease !== undefined) {
@@ -1054,7 +1054,7 @@ export const make = Effect.gen(function* () {
           for (const route of connectionRoutes(entry)) {
             const profile = Option.getOrNull(route.profile);
             if (profile !== null && isSshConnectionProfile(profile)) {
-              yield* disconnectSsh(environmentId, profile);
+              yield* disconnectSsh(machineId, profile);
             }
           }
         }
@@ -1062,13 +1062,13 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const state = Effect.fn("EnvironmentRegistry.state")(function* (environmentId: EnvironmentId) {
-    const supervisor = yield* acquireSupervisor(environmentId);
+  const state = Effect.fn("EnvironmentRegistry.state")(function* (machineId: MachineId) {
+    const supervisor = yield* acquireSupervisor(machineId);
     return yield* SubscriptionRef.get(supervisor.state);
   });
-  const stateChanges = (environmentId: EnvironmentId) =>
+  const stateChanges = (machineId: MachineId) =>
     followStream(
-      environmentId,
+      machineId,
       Stream.unwrap(
         EnvironmentSupervisor.EnvironmentSupervisor.pipe(
           Effect.map((supervisor) => SubscriptionRef.changes(supervisor.state)),
@@ -1092,13 +1092,13 @@ export const make = Effect.gen(function* () {
   );
 
   const setCompatibility = Effect.fn("EnvironmentRegistry.setCompatibility")(function* (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     error: ConnectionBlockedError | null,
   ) {
     yield* withLeaseLock(
-      environmentId,
+      machineId,
       Effect.gen(function* () {
-        const entry = (yield* SubscriptionRef.get(entries)).get(environmentId);
+        const entry = (yield* SubscriptionRef.get(entries)).get(machineId);
         if (
           entry === undefined ||
           (entry.unsupportedReason === (error?.message ?? undefined) &&
@@ -1119,16 +1119,16 @@ export const make = Effect.gen(function* () {
                 unsupportedReason: error.message,
                 ...(error.serverUpdateRequired === true ? { serverUpdateRequired: true } : {}),
               };
-        const lease = (yield* SubscriptionRef.get(serviceScopes)).get(environmentId);
+        const lease = (yield* SubscriptionRef.get(serviceScopes)).get(machineId);
         if (lease !== undefined) {
           yield* SubscriptionRef.update(serviceScopes, (current) =>
-            new Map(current).set(environmentId, { ...lease, entry: next }),
+            new Map(current).set(machineId, { ...lease, entry: next }),
           );
           if (error !== null) yield* lease.supervisor.disconnect;
           else if (next.enabled) yield* lease.supervisor.connect;
         }
         yield* SubscriptionRef.update(entries, (current) =>
-          new Map(current).set(environmentId, next),
+          new Map(current).set(machineId, next),
         );
       }),
     );
@@ -1144,7 +1144,7 @@ export const make = Effect.gen(function* () {
     remove,
     removeRoute,
     reorderRoutes,
-    removeRelayEnvironments,
+    removeRelayMachines,
     retryNow,
     setEnabled,
     setCompatibility,

@@ -1,5 +1,5 @@
 import {
-  EnvironmentId,
+  MachineId,
   type ServerConfig,
   type ServerConfigStreamEvent,
   type ServerLifecycleWelcomePayload,
@@ -57,7 +57,7 @@ const CONFIG = {
   observability: null,
   providers: [],
   settings: {},
-  environment: { capabilities: { environmentThemes: true } },
+  machine: { capabilities: { machineThemes: true } },
 } as unknown as ServerConfig;
 
 const snapshotEvent = (config: ServerConfig): ServerConfigStreamEvent => ({
@@ -67,10 +67,10 @@ const snapshotEvent = (config: ServerConfig): ServerConfigStreamEvent => ({
 });
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-1"),
-  label: "Test environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  machineId: MachineId.make("machine-1"),
+  label: "Test machine",
+  httpBaseUrl: "https://machine.example.test",
+  wsBaseUrl: "wss://machine.example.test",
 });
 
 function session(client: WsRpcProtocolClient): RpcSession {
@@ -96,7 +96,7 @@ describe("update restart reconnect nudges", () => {
           type: "ready" as const,
           payload: {
             at: "2026-09-01T00:00:00.000Z",
-            environment: { serverVersion },
+            machine: { serverVersion },
           },
         }) as Parameters<typeof matchesServerUpdateReadyEvent>[1];
       yield* Queue.offerAll(readyEvents, [ready("0.0.30"), ready("0.0.31")]);
@@ -111,7 +111,7 @@ describe("update restart reconnect nudges", () => {
         Ref.update(retries, (count) => count + 1).pipe(Effect.andThen(Effect.fail(disconnect))),
       );
 
-      expect(result.payload.environment.serverVersion).toBe("0.0.31");
+      expect(result.payload.machine.serverVersion).toBe("0.0.31");
       expect(yield* Ref.get(retries)).toBe(1);
     }),
   );
@@ -193,7 +193,7 @@ describe("update restart reconnect nudges", () => {
             phase: "blocked",
             lastFailure: {
               reason: "authentication",
-              detail: "The environment credential is invalid.",
+              detail: "The machine credential is invalid.",
             },
           },
           { phase: "blocked", lastFailure: { reason: "configuration" } },
@@ -331,7 +331,7 @@ describe("server state projection", () => {
           type: "ready" as const,
           payload: {
             at: "2026-08-01T00:00:00.000Z",
-            environment: { serverVersion: status === "committed" ? "0.0.31" : "0.0.30" },
+            machine: { serverVersion: status === "committed" ? "0.0.31" : "0.0.30" },
             updateOutcome: {
               id: "update-1",
               fromVersion: "0.0.30",
@@ -359,7 +359,7 @@ describe("server state projection", () => {
         type: "ready" as const,
         payload: {
           at: "2026-09-01T00:00:00.000Z",
-          environment: { serverVersion },
+          machine: { serverVersion },
         },
       }) as Parameters<typeof matchesServerUpdateResumeEvent>[1];
 
@@ -394,33 +394,33 @@ describe("server state projection", () => {
 
     const withThemes = applyServerConfigProjection(
       applyServerConfigProjection(Option.none(), { version: 1, type: "snapshot", config: CONFIG }),
-      { version: 1, type: "environmentThemesUpdated", payload: { themes } },
+      { version: 1, type: "machineThemesUpdated", payload: { themes } },
     );
-    expect(Option.getOrThrow(withThemes).config.environmentThemes).toEqual(themes);
+    expect(Option.getOrThrow(withThemes).config.machineThemes).toEqual(themes);
 
     const afterReconnect = applyServerConfigProjection(withThemes, {
       version: 1,
       type: "snapshot",
       config: CONFIG,
     });
-    expect(Option.getOrThrow(afterReconnect).config.environmentThemes).toEqual(themes);
+    expect(Option.getOrThrow(afterReconnect).config.machineThemes).toEqual(themes);
 
     const downgraded = applyServerConfigProjection(withThemes, {
       version: 1,
       type: "snapshot",
       config: {
         ...CONFIG,
-        environment: { capabilities: {} },
+        machine: { capabilities: {} },
       } as unknown as ServerConfig,
     });
-    expect(Option.getOrThrow(downgraded).config.environmentThemes).toBeUndefined();
+    expect(Option.getOrThrow(downgraded).config.machineThemes).toBeUndefined();
   });
 
   it("keeps a current welcome on ready and rejects a buffered welcome from the old session", () => {
     const firstSession = session({} as WsRpcProtocolClient);
     const secondSession = session({} as WsRpcProtocolClient);
     const welcome = {
-      environment: {} as ServerLifecycleWelcomePayload["environment"],
+      machine: {} as ServerLifecycleWelcomePayload["machine"],
       cwd: "/repo",
       projectName: "repo",
     } as ServerLifecycleWelcomePayload;
@@ -476,7 +476,7 @@ describe("server state projection", () => {
         retryNow: Effect.void,
       } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
       const staleWelcome = {
-        environment: {} as ServerLifecycleWelcomePayload["environment"],
+        machine: {} as ServerLifecycleWelcomePayload["machine"],
         cwd: "/stale",
         projectName: "stale",
       } as ServerLifecycleWelcomePayload;
@@ -589,12 +589,12 @@ describe("server state projection", () => {
         retryNow: Effect.void,
       } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
       const firstWelcome = {
-        environment: {} as ServerLifecycleWelcomePayload["environment"],
+        machine: {} as ServerLifecycleWelcomePayload["machine"],
         cwd: "/first",
         projectName: "first",
       } as ServerLifecycleWelcomePayload;
       const secondWelcome = {
-        environment: {} as ServerLifecycleWelcomePayload["environment"],
+        machine: {} as ServerLifecycleWelcomePayload["machine"],
         cwd: "/second",
         projectName: "second",
       } as ServerLifecycleWelcomePayload;
@@ -639,7 +639,7 @@ describe("server state projection", () => {
     const config = (source: string, serverVersion: string) =>
       ({
         ...CONFIG,
-        environment: { serverVersion },
+        machine: { serverVersion },
         settings: { source },
       }) as unknown as ServerConfig;
     const cached = config("cache", "0.0.29");

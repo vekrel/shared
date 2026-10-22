@@ -1,8 +1,8 @@
 import {
-  EnvironmentAuthorizationError,
+  MachineAuthorizationError,
   clientRpcRequiredScopes,
   authScopeRequiredResponse,
-  type EnvironmentId,
+  type MachineId,
   type ClientGuardedRpcTag,
   ORCHESTRATION_V2_WS_METHODS,
   WS_METHODS,
@@ -24,13 +24,13 @@ import type { RpcSession } from "../rpc/session.ts";
 export class EnvironmentRpcUnavailableError extends Schema.TaggedError<EnvironmentRpcUnavailableError>()(
   "EnvironmentRpcUnavailableError",
   {
-    environmentId: Schema.String,
+    machineId: Schema.String,
     message: Schema.String,
   },
 ) {}
 
 export interface EnvironmentRpcRequestObservation {
-  readonly environmentId: string;
+  readonly machineId: string;
   readonly environmentLabel: string;
   readonly method: string;
 }
@@ -88,7 +88,7 @@ export type EnvironmentStreamRpcTag =
 export type EnvironmentUnaryRpcTag = Exclude<EnvironmentRpcTag, EnvironmentStreamRpcTag>;
 
 export interface EnvironmentRpcSubscriptionObservation {
-  readonly environmentId: string;
+  readonly machineId: string;
   readonly method: EnvironmentSubscriptionRpcTag;
   readonly input: unknown;
 }
@@ -104,7 +104,7 @@ export class EnvironmentRpcSubscriptionObserver extends Context.Reference<{
 }) {}
 
 export const isRpcClientError = Schema.is(RpcClientError.RpcClientError);
-const isEnvironmentAuthorizationError = Schema.is(EnvironmentAuthorizationError);
+const isMachineAuthorizationError = Schema.is(MachineAuthorizationError);
 
 const MAX_EXPECTED_FAILURE_RETRY_DELAY_MS = 30_000;
 
@@ -138,7 +138,7 @@ const currentSession = Effect.fn("EnvironmentRpc.currentSession")(function* () {
         onNone: () =>
           Effect.fail(
             new EnvironmentRpcUnavailableError({
-              environmentId: supervisor.target.environmentId,
+              machineId: supervisor.target.machineId,
               message: `${supervisor.target.label} is not connected.`,
             }),
           ),
@@ -158,10 +158,10 @@ export const getInitialServerConfig = Effect.fn("EnvironmentRpc.getInitialServer
 /** Installed by the shared command boundary. A missing boundary denies protected writes. */
 export class RpcPermissionGuard extends Context.Reference<{
   readonly authorize: (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     method: string,
     input: unknown,
-  ) => Effect.Effect<void, EnvironmentAuthorizationError>;
+  ) => Effect.Effect<void, MachineAuthorizationError>;
 }>("@vekrel/client-runtime/rpc/RpcPermissionGuard", {
   defaultValue: () => ({
     authorize: (_environmentId, method, input) => {
@@ -169,7 +169,7 @@ export class RpcPermissionGuard extends Context.Reference<{
       return scope === undefined
         ? Effect.void
         : Effect.fail(
-            new EnvironmentAuthorizationError({
+            new MachineAuthorizationError({
               ...authScopeRequiredResponse(scope),
               message: `This connection requires ${scope}.`,
             }),
@@ -185,7 +185,7 @@ const authorizeRequest = Effect.fn("EnvironmentRpc.authorize")(function* (
   if (clientRpcRequiredScopes(method, input).length === 0) return;
   const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
   const guard = yield* RpcPermissionGuard;
-  yield* guard.authorize(supervisor.target.environmentId, method, input);
+  yield* guard.authorize(supervisor.target.machineId, method, input);
 });
 
 export const requestGuarded = Effect.fn("EnvironmentRpc.request")(function* <
@@ -193,7 +193,7 @@ export const requestGuarded = Effect.fn("EnvironmentRpc.request")(function* <
 >(tag: TTag, input: EnvironmentRpcInput<TTag>) {
   const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
   yield* Effect.annotateCurrentSpan({
-    "environment.id": supervisor.target.environmentId,
+    "machine.id": supervisor.target.machineId,
     "rpc.method": tag,
   });
   const session = yield* currentSession();
@@ -203,7 +203,7 @@ export const requestGuarded = Effect.fn("EnvironmentRpc.request")(function* <
     input: EnvironmentRpcInput<TTag>,
   ) => Effect.Effect<EnvironmentRpcSuccess<TTag>, EnvironmentRpcFailure<TTag>>;
   const completeObservation = yield* observer.observe({
-    environmentId: supervisor.target.environmentId,
+    machineId: supervisor.target.machineId,
     environmentLabel: supervisor.target.label,
     method: tag,
   });
@@ -217,7 +217,7 @@ export function runStreamGuarded<TTag extends EnvironmentStreamCommandRpcTag>(
   EnvironmentRpcStreamValue<TTag>,
   | EnvironmentRpcStreamFailure<TTag>
   | EnvironmentRpcUnavailableError
-  | EnvironmentAuthorizationError,
+  | MachineAuthorizationError,
   EnvironmentSupervisor.EnvironmentSupervisor
 > {
   return Stream.unwrap(
@@ -297,7 +297,7 @@ function subscribeDynamicMapped<TTag extends EnvironmentSubscriptionRpcTag, A>(
                     Effect.gen(function* () {
                       const input = yield* makeInput(session);
                       const completeObservation = yield* observer.observe({
-                        environmentId: supervisor.target.environmentId,
+                        machineId: supervisor.target.machineId,
                         method: tag,
                         input,
                       });
@@ -339,7 +339,7 @@ function subscribeDynamicMapped<TTag extends EnvironmentSubscriptionRpcTag, A>(
                             {
                               cause: Cause.pretty(cause),
                               method: tag,
-                              environmentId: supervisor.target.environmentId,
+                              machineId: supervisor.target.machineId,
                             },
                           ),
                         ).pipe(Stream.drain);
@@ -350,7 +350,7 @@ function subscribeDynamicMapped<TTag extends EnvironmentSubscriptionRpcTag, A>(
                         );
                         const isAuthorizationFailure = cause.reasons.some(
                           (reason) =>
-                            reason._tag === "Fail" && isEnvironmentAuthorizationError(reason.error),
+                            reason._tag === "Fail" && isMachineAuthorizationError(reason.error),
                         );
                         if (
                           options.retryExpectedFailureAfter === undefined ||

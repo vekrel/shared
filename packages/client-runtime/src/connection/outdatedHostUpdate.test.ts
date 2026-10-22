@@ -1,7 +1,7 @@
 import {
-  EnvironmentId,
+  MachineId,
   ORCHESTRATION_PROTOCOL_VERSION,
-  ExecutionEnvironmentDescriptor,
+  ExecutionMachineDescriptor,
   WS_METHODS,
 } from "@vekrel/contracts";
 import { describe, expect, it } from "@effect/vitest";
@@ -20,10 +20,10 @@ import { PrimaryConnectionTarget } from "./model.ts";
 import { describeOutdatedHost, updateOutdatedHost } from "./outdatedHostUpdate.ts";
 import * as EnvironmentRegistry from "./registry.ts";
 import * as ConnectionResolver from "./resolver.ts";
-import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
+import * as RelayMachineDiscovery from "../relay/discovery.ts";
 
 const TARGET = new PrimaryConnectionTarget({
-  environmentId: EnvironmentId.make("environment-old"),
+  machineId: MachineId.make("machine-old"),
   label: "Build Mac",
   httpBaseUrl: "https://build.example.test",
   wsBaseUrl: "wss://build.example.test",
@@ -31,13 +31,13 @@ const TARGET = new PrimaryConnectionTarget({
 
 const descriptor = (protocol: number | undefined, serverVersion: string) =>
   ({
-    environmentId: TARGET.environmentId,
+    machineId: TARGET.machineId,
     label: TARGET.label,
     platform: { os: "darwin", arch: "arm64" },
     serverVersion,
     ...(protocol === undefined ? {} : { orchestrationProtocolVersion: protocol }),
     capabilities: { repositoryIdentity: true, serverSelfUpdate: "boot-service" },
-  }) satisfies ExecutionEnvironmentDescriptor;
+  }) satisfies ExecutionMachineDescriptor;
 
 const RpcRequest = Schema.TaggedStruct("Request", {
   id: Schema.Union([Schema.String, Schema.Number]),
@@ -47,21 +47,21 @@ const RpcRequest = Schema.TaggedStruct("Request", {
 const isRpcRequest = Schema.is(RpcRequest);
 const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 const encodeJson = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
-const encodeDescriptor = Schema.encodeSync(Schema.fromJsonString(ExecutionEnvironmentDescriptor));
+const encodeDescriptor = Schema.encodeSync(Schema.fromJsonString(ExecutionMachineDescriptor));
 
 describe("describeOutdatedHost", () => {
   it.effect("discovers a disabled outdated host without opening a normal session", () =>
     Effect.gen(function* () {
       const expected = descriptor(undefined, "0.0.45");
-      const result = yield* describeOutdatedHost(TARGET.environmentId).pipe(
+      const result = yield* describeOutdatedHost(TARGET.machineId).pipe(
         Effect.provideService(
           EnvironmentRegistry.EnvironmentRegistry,
           EnvironmentRegistry.EnvironmentRegistry.of({
             entries: yield* SubscriptionRef.make<
-              ReadonlyMap<EnvironmentId, ConnectionCatalogEntry>
+              ReadonlyMap<MachineId, ConnectionCatalogEntry>
             >(
               new Map([
-                [TARGET.environmentId, { target: TARGET, profile: Option.none(), enabled: false }],
+                [TARGET.machineId, { target: TARGET, profile: Option.none(), enabled: false }],
               ]),
             ),
           } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]),
@@ -74,7 +74,7 @@ describe("describeOutdatedHost", () => {
               Effect.succeed({
                 descriptor: expected,
                 prepared: {
-                  environmentId: entry.target.environmentId,
+                  machineId: entry.target.machineId,
                   label: entry.target.label,
                   httpBaseUrl: TARGET.httpBaseUrl,
                   socketUrl: "wss://build.example.test/ws",
@@ -158,13 +158,13 @@ describe("updateOutdatedHost", () => {
       expect(blocked).toMatchObject({ serverUpdateRequired: true });
 
       const sockets: Array<OutdatedHostSocket> = [];
-      let served: ExecutionEnvironmentDescriptor = descriptor(undefined, "0.0.45");
+      let served: ExecutionMachineDescriptor = descriptor(undefined, "0.0.45");
       const entries = yield* SubscriptionRef.make<
-        ReadonlyMap<EnvironmentId, ConnectionCatalogEntry>
+        ReadonlyMap<MachineId, ConnectionCatalogEntry>
       >(
         new Map([
           [
-            TARGET.environmentId,
+            TARGET.machineId,
             {
               target: TARGET,
               profile: Option.none(),
@@ -178,9 +178,9 @@ describe("updateOutdatedHost", () => {
       const calls: Array<string> = [];
       const registry = EnvironmentRegistry.EnvironmentRegistry.of({
         entries,
-        setCompatibility: (_environmentId: EnvironmentId, error: unknown) =>
+        setCompatibility: (_environmentId: MachineId, error: unknown) =>
           Effect.sync(() => calls.push(`compatibility:${error === null ? "clear" : "block"}`)),
-        setEnabled: (_environmentId: EnvironmentId, enabled: boolean) =>
+        setEnabled: (_environmentId: MachineId, enabled: boolean) =>
           Effect.sync(() => calls.push(`enabled:${enabled}`)),
       } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]);
       const resolver = ConnectionResolver.ConnectionResolver.of({
@@ -190,7 +190,7 @@ describe("updateOutdatedHost", () => {
             Effect.map((current) => ({
               descriptor: current,
               prepared: {
-                environmentId: TARGET.environmentId,
+                machineId: TARGET.machineId,
                 label: TARGET.label,
                 httpBaseUrl: TARGET.httpBaseUrl,
                 socketUrl: "wss://build.example.test/ws?wsTicket=ticket",
@@ -207,7 +207,7 @@ describe("updateOutdatedHost", () => {
       );
 
       const result = yield* updateOutdatedHost(
-        TARGET.environmentId,
+        TARGET.machineId,
         { targetVersion: "0.0.46" },
         () => Effect.void,
       ).pipe(
@@ -216,10 +216,10 @@ describe("updateOutdatedHost", () => {
             Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, registry),
             Layer.succeed(ConnectionResolver.ConnectionResolver, resolver),
             Layer.succeed(
-              RelayEnvironmentDiscovery.RelayEnvironmentDiscovery,
-              RelayEnvironmentDiscovery.RelayEnvironmentDiscovery.of({
+              RelayMachineDiscovery.RelayMachineDiscovery,
+              RelayMachineDiscovery.RelayMachineDiscovery.of({
                 state: yield* SubscriptionRef.make(
-                  RelayEnvironmentDiscovery.EMPTY_RELAY_ENVIRONMENT_DISCOVERY_STATE,
+                  RelayMachineDiscovery.EMPTY_RELAY_MACHINE_DISCOVERY_STATE,
                 ),
                 refresh: Effect.void,
               }),
@@ -253,7 +253,7 @@ describe("updateOutdatedHost", () => {
       };
       let opened = false;
       const error = yield* Effect.flip(
-        updateOutdatedHost(TARGET.environmentId, { targetVersion: "0.0.46" }, () => Effect.void),
+        updateOutdatedHost(TARGET.machineId, { targetVersion: "0.0.46" }, () => Effect.void),
       ).pipe(
         Effect.provide(
           Layer.mergeAll(
@@ -261,11 +261,11 @@ describe("updateOutdatedHost", () => {
               EnvironmentRegistry.EnvironmentRegistry,
               EnvironmentRegistry.EnvironmentRegistry.of({
                 entries: yield* SubscriptionRef.make<
-                  ReadonlyMap<EnvironmentId, ConnectionCatalogEntry>
+                  ReadonlyMap<MachineId, ConnectionCatalogEntry>
                 >(
                   new Map([
                     [
-                      TARGET.environmentId,
+                      TARGET.machineId,
                       { target: TARGET, profile: Option.none(), enabled: false },
                     ],
                   ]),
@@ -280,7 +280,7 @@ describe("updateOutdatedHost", () => {
                   Effect.succeed({
                     descriptor: manual,
                     prepared: {
-                      environmentId: TARGET.environmentId,
+                      machineId: TARGET.machineId,
                       label: TARGET.label,
                       httpBaseUrl: TARGET.httpBaseUrl,
                       socketUrl: "wss://build.example.test/ws",
@@ -291,10 +291,10 @@ describe("updateOutdatedHost", () => {
               }),
             ),
             Layer.succeed(
-              RelayEnvironmentDiscovery.RelayEnvironmentDiscovery,
-              RelayEnvironmentDiscovery.RelayEnvironmentDiscovery.of({
+              RelayMachineDiscovery.RelayMachineDiscovery,
+              RelayMachineDiscovery.RelayMachineDiscovery.of({
                 state: yield* SubscriptionRef.make(
-                  RelayEnvironmentDiscovery.EMPTY_RELAY_ENVIRONMENT_DISCOVERY_STATE,
+                  RelayMachineDiscovery.EMPTY_RELAY_MACHINE_DISCOVERY_STATE,
                 ),
                 refresh: Effect.void,
               }),

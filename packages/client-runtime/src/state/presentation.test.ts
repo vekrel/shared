@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { EnvironmentId, type ServerConfig } from "@vekrel/contracts";
+import { MachineId, type ServerConfig } from "@vekrel/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
@@ -11,12 +11,12 @@ import {
 } from "./presentation.ts";
 import type { EnvironmentCatalogState } from "./connections.ts";
 
-const FIRST = EnvironmentId.make("first");
-const SECOND = EnvironmentId.make("second");
-function entry(environmentId: EnvironmentId, label = environmentId as string) {
+const FIRST = MachineId.make("first");
+const SECOND = MachineId.make("second");
+function entry(machineId: MachineId, label = machineId as string) {
   return {
     target: new PrimaryConnectionTarget({
-      environmentId,
+      machineId,
       label,
       httpBaseUrl: "https://example.test",
       wsBaseUrl: "wss://example.test",
@@ -28,7 +28,7 @@ function entry(environmentId: EnvironmentId, label = environmentId as string) {
 function config(pullRequests = false, cwd = "/workspace"): ServerConfig {
   return {
     cwd,
-    environment: { capabilities: { pullRequests }, platform: { machine: "desktop" } },
+    machine: { capabilities: { pullRequests }, platform: { machine: "desktop" } },
   } as ServerConfig;
 }
 function harness() {
@@ -39,7 +39,7 @@ function harness() {
       [SECOND, entry(SECOND)],
     ]),
   });
-  const configs = Atom.family((_id: EnvironmentId) => Atom.make<ServerConfig | null>(config()));
+  const configs = Atom.family((_id: MachineId) => Atom.make<ServerConfig | null>(config()));
   const state = Atom.make(AsyncResult.success(AVAILABLE_CONNECTION_STATE));
   const full = createEnvironmentPresentationAtoms({
     catalogValueAtom: catalog,
@@ -53,8 +53,8 @@ function harness() {
   return { catalog, configs, state, full, ...summaries, registry: AtomRegistry.make() };
 }
 
-describe("environment summary subscriptions", () => {
-  it("tracks capabilities across environments, config loss and removal", () => {
+describe("machine summary subscriptions", () => {
+  it("tracks capabilities across machines, config loss and removal", () => {
     const h = harness();
     const stop = h.registry.subscribe(h.pullRequestsSupportedAtom, () => {});
     try {
@@ -66,8 +66,8 @@ describe("environment summary subscriptions", () => {
       expect(h.registry.get(h.pullRequestsSupportedAtom)).toBe(true);
       h.registry.set(h.catalog, { isReady: true, entries: new Map([[FIRST, entry(FIRST)]]) });
       expect(h.registry.get(h.pullRequestsSupportedAtom)).toBe(false);
-      expect(h.registry.get(h.environmentIdsAtom)).toEqual([FIRST]);
-      expect(h.registry.get(h.identitiesAtom)).toEqual([{ environmentId: FIRST, label: "first" }]);
+      expect(h.registry.get(h.machineIdsAtom)).toEqual([FIRST]);
+      expect(h.registry.get(h.identitiesAtom)).toEqual([{ machineId: FIRST, label: "first" }]);
       h.registry.set(h.catalog, {
         isReady: true,
         entries: new Map([
@@ -75,12 +75,12 @@ describe("environment summary subscriptions", () => {
           [FIRST, entry(FIRST)],
         ]),
       });
-      expect(h.registry.get(h.environmentIdsAtom)).toEqual([SECOND, FIRST]);
+      expect(h.registry.get(h.machineIdsAtom)).toEqual([SECOND, FIRST]);
       expect(h.registry.get(h.pullRequestsSupportedAtom)).toBe(true);
       h.registry.set(h.configs(SECOND), config(false));
       expect(h.registry.get(h.pullRequestsSupportedAtom)).toBe(false);
       h.registry.set(h.catalog, { isReady: true, entries: new Map() });
-      expect(h.registry.get(h.environmentIdsAtom)).toEqual([]);
+      expect(h.registry.get(h.machineIdsAtom)).toEqual([]);
       expect(h.registry.get(h.identitiesAtom)).toEqual([]);
       expect(h.registry.get(h.environmentsAtom)).toEqual([]);
     } finally {
@@ -116,14 +116,14 @@ describe("presentations with providers", () => {
     }
   });
 
-  it("leaves out unsupported environments", () => {
+  it("leaves out unsupported machines", () => {
     const h = harness();
     const atom = h.full.presentationsWithProvidersAtom;
     const stop = h.registry.subscribe(atom, () => {});
     try {
       h.registry.set(h.catalog, {
         isReady: true,
-        entries: new Map<EnvironmentId, ConnectionCatalogEntry>([
+        entries: new Map<MachineId, ConnectionCatalogEntry>([
           [FIRST, entry(FIRST)],
           [SECOND, { ...entry(SECOND), unsupportedReason: "Server is too old." }],
         ]),

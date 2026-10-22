@@ -2,10 +2,10 @@ import {
   clientRpcRequiredScopes,
   sessionGrantsScope,
   authScopeRequiredResponse,
-  EnvironmentAuthorizationError,
-  type EnvironmentId,
+  MachineAuthorizationError,
+  type MachineId,
   type AuthSessionState,
-  type AuthEnvironmentScope,
+  type AuthMachineScope,
 } from "@vekrel/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -19,13 +19,13 @@ function makeCommandPermissions<R, E>(
 ) {
   const sessions = createEnvironmentSessionAtoms(runtime);
   const requiredScopes = (input?: unknown) => clientRpcRequiredScopes(method, input);
-  const atomsByEnvironment = Atom.family((environmentId: EnvironmentId | null) =>
+  const atomsByEnvironment = Atom.family((machineId: MachineId | null) =>
     Atom.family((scopeKey: string) =>
       Atom.make((get) => {
-        if (environmentId === null) return false;
-        const scopes = scopeKey.split(",").filter(Boolean) as AuthEnvironmentScope[];
+        if (machineId === null) return false;
+        const scopes = scopeKey.split(",").filter(Boolean) as AuthMachineScope[];
         if (scopes.length === 0) return true;
-        const result = get(sessions.sessionStateAtom(environmentId));
+        const result = get(sessions.sessionStateAtom(machineId));
         const session = Option.getOrNull(AsyncResult.value(result));
         return (
           result._tag !== "Failure" &&
@@ -35,17 +35,17 @@ function makeCommandPermissions<R, E>(
       }),
     ),
   );
-  const permissionAtom = (environmentId: EnvironmentId | null, input?: unknown) =>
-    atomsByEnvironment(environmentId)(requiredScopes(input).join(","));
+  const permissionAtom = (machineId: MachineId | null, input?: unknown) =>
+    atomsByEnvironment(machineId)(requiredScopes(input).join(","));
   const authorize = (
     registry: AtomRegistry.AtomRegistry,
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     input?: unknown,
   ) =>
     Effect.suspend(() => {
       const scopes = requiredScopes(input);
       if (scopes.length === 0) return Effect.void;
-      const atom = sessions.sessionStateAtom(environmentId);
+      const atom = sessions.sessionStateAtom(machineId);
       return Effect.scoped(
         Effect.gen(function* () {
           yield* AtomRegistry.mount(registry, atom);
@@ -60,7 +60,7 @@ function makeCommandPermissions<R, E>(
           );
           if (missing !== undefined)
             return yield* Effect.fail(
-              new EnvironmentAuthorizationError({
+              new MachineAuthorizationError({
                 ...authScopeRequiredResponse(missing),
                 message: `This connection requires ${missing}.`,
               }),

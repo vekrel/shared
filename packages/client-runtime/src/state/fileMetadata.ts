@@ -1,6 +1,6 @@
 import {
   FILESYSTEM_METADATA_BATCH_LIMIT,
-  type EnvironmentId,
+  type MachineId,
   type FilesystemEntryMetadata,
   type ProjectEntry,
   type ScopedThreadRef,
@@ -62,7 +62,7 @@ export function createFileMetadataAtoms<R, E>(
     string,
     { readers: number; sessions: WeakMap<RpcSession, RetainedMetadata> }
   >();
-  const threadKey = (ref: ScopedThreadRef) => JSON.stringify([ref.environmentId, ref.threadId]);
+  const threadKey = (ref: ScopedThreadRef) => JSON.stringify([ref.machineId, ref.threadId]);
   const retainThreadFamily = Atom.family((key: string) =>
     Atom.make((get) => {
       let retained = retainedThreads.get(key);
@@ -79,8 +79,8 @@ export function createFileMetadataAtoms<R, E>(
   const revisions = Atom.family((key: string) =>
     Atom.make(0).pipe(Atom.withLabel(`file-metadata-revision:${key}`)),
   );
-  const revision = (environmentId: EnvironmentId, path: string) =>
-    revisions(JSON.stringify([environmentId, normalizeProjectPathForComparison(path)]));
+  const revision = (machineId: MachineId, path: string) =>
+    revisions(JSON.stringify([machineId, normalizeProjectPathForComparison(path)]));
   const knownEntry = (session: RpcSession, path: string, now: number) => {
     const key = normalizeProjectPathForComparison(path);
     const cached = cache.get(session)?.get(key);
@@ -182,7 +182,7 @@ export function createFileMetadataAtoms<R, E>(
   });
 
   const metadataFamily = createEnvironmentQueryAtomFamily(runtime, {
-    label: "environment-data:filesystem:metadata",
+    label: "machine-data:filesystem:metadata",
     staleTimeMs: METADATA_STALE_TIME_MS,
     idleTtlMs: METADATA_STALE_TIME_MS,
     execute: Effect.fnUntraced(function* (input: FileMetadataInput) {
@@ -191,7 +191,7 @@ export function createFileMetadataAtoms<R, E>(
       if (session._tag === "None") return null;
       const thread = input.threadId
         ? retainedThreads.get(
-            threadKey({ environmentId: supervisor.target.environmentId, threadId: input.threadId }),
+            threadKey({ machineId: supervisor.target.machineId, threadId: input.threadId }),
           )
         : undefined;
       let retained = thread?.sessions.get(session.value);
@@ -218,15 +218,15 @@ export function createFileMetadataAtoms<R, E>(
       );
     }),
     refreshTrigger: ({
-      environmentId,
+      machineId,
       input,
     }: {
-      environmentId: EnvironmentId;
+      machineId: MachineId;
       input: FileMetadataInput;
-    }) => revision(environmentId, input.path),
+    }) => revision(machineId, input.path),
   });
   const metadata = (target: {
-    environmentId: EnvironmentId;
+    machineId: MachineId;
     input: { path: string; threadId?: ThreadId };
   }) =>
     metadataFamily({
@@ -316,11 +316,11 @@ export function createFileMetadataAtoms<R, E>(
     });
 
   const refreshPath = (
-    environmentId: EnvironmentId,
+    machineId: MachineId,
     path: string,
     registry: AtomRegistry.AtomRegistry,
   ) => {
-    const signal = revision(environmentId, path);
+    const signal = revision(machineId, path);
     registry.set(signal, registry.get(signal) + 1);
   };
 

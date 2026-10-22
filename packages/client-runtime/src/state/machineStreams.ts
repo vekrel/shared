@@ -1,11 +1,11 @@
-import type { EnvironmentId as EnvironmentIdType } from "@vekrel/contracts";
+import type { MachineId as MachineIdType } from "@vekrel/contracts";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import type * as EnvironmentSupervisor from "../connection/supervisor.ts";
 
 export function runStreamInEnvironment<A, E, R>(
-  environmentId: EnvironmentIdType,
+  machineId: MachineIdType,
   stream: Stream.Stream<A, E, R>,
 ): Stream.Stream<
   A,
@@ -14,13 +14,13 @@ export function runStreamInEnvironment<A, E, R>(
 > {
   return Stream.unwrap(
     EnvironmentRegistry.EnvironmentRegistry.pipe(
-      Effect.map((registry) => registry.runStream(environmentId, stream)),
+      Effect.map((registry) => registry.runStream(machineId, stream)),
     ),
   );
 }
 
 export function followStreamInEnvironment<A, E, R>(
-  environmentId: EnvironmentIdType,
+  machineId: MachineIdType,
   stream: Stream.Stream<A, E, R>,
 ): Stream.Stream<
   A,
@@ -29,7 +29,7 @@ export function followStreamInEnvironment<A, E, R>(
 > {
   return Stream.unwrap(
     EnvironmentRegistry.EnvironmentRegistry.pipe(
-      Effect.map((registry) => registry.followStream(environmentId, stream)),
+      Effect.map((registry) => registry.followStream(machineId, stream)),
     ),
   );
 }
