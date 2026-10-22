@@ -16,15 +16,15 @@ import * as RequestResolver from "effect/RequestResolver";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom, AtomRegistry } from "effect/reactivity";
 
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
 import {
   request,
-  type EnvironmentRpcFailure,
-  EnvironmentRpcUnavailableError,
+  type MachineRpcFailure,
+  MachineRpcUnavailableError,
 } from "../rpc/client.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import { createEnvironmentQueryAtomFamily } from "./runtime.ts";
+import { createMachineQueryAtomFamily } from "./runtime.ts";
 
 const METADATA_STALE_TIME_MS = 60_000;
 const METADATA_CACHE_LIMIT = 1024;
@@ -45,15 +45,15 @@ class FileMetadataRequest extends Request.Class<
   {
     path: string;
     session: RpcSession;
-    supervisor: EnvironmentSupervisor.EnvironmentSupervisor["Service"];
+    supervisor: MachineSupervisor.MachineSupervisor["Service"];
     retained?: RetainedMetadata;
   },
   FilesystemEntryMetadata | null,
-  EnvironmentRpcFailure<typeof WS_METHODS.filesystemGetMetadata> | EnvironmentRpcUnavailableError
+  MachineRpcFailure<typeof WS_METHODS.filesystemGetMetadata> | MachineRpcUnavailableError
 > {}
 
 export function createFileMetadataAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  runtime: Atom.AtomRuntime<MachineRegistry | R, E>,
 ) {
   const cache = new WeakMap<RpcSession, Map<string, CachedMetadata>>();
   const invalidationVersions = new WeakMap<RpcSession, number>();
@@ -143,7 +143,7 @@ export function createFileMetadataAtoms<R, E>(
         pending = yield* Effect.gen(function* () {
           const result = yield* request(WS_METHODS.filesystemGetMetadata, { paths }).pipe(
             Effect.provideService(
-              EnvironmentSupervisor.EnvironmentSupervisor,
+              MachineSupervisor.MachineSupervisor,
               entries[0].request.supervisor,
             ),
           );
@@ -181,12 +181,12 @@ export function createFileMetadataAtoms<R, E>(
     }),
   });
 
-  const metadataFamily = createEnvironmentQueryAtomFamily(runtime, {
+  const metadataFamily = createMachineQueryAtomFamily(runtime, {
     label: "machine-data:filesystem:metadata",
     staleTimeMs: METADATA_STALE_TIME_MS,
     idleTtlMs: METADATA_STALE_TIME_MS,
     execute: Effect.fnUntraced(function* (input: FileMetadataInput) {
-      const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+      const supervisor = yield* MachineSupervisor.MachineSupervisor;
       const session = yield* SubscriptionRef.get(supervisor.session);
       if (session._tag === "None") return null;
       const thread = input.threadId
@@ -239,7 +239,7 @@ export function createFileMetadataAtoms<R, E>(
     entries: ReadonlyArray<ProjectEntry>,
     isCurrent?: (session: RpcSession) => boolean,
   ) {
-    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const supervisor = yield* MachineSupervisor.MachineSupervisor;
     const session = yield* SubscriptionRef.get(supervisor.session);
     if (session._tag === "None") return;
     const now = yield* Clock.currentTimeMillis;
@@ -253,7 +253,7 @@ export function createFileMetadataAtoms<R, E>(
   });
 
   const invalidate = Effect.fnUntraced(function* (path: string) {
-    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const supervisor = yield* MachineSupervisor.MachineSupervisor;
     const session = yield* SubscriptionRef.get(supervisor.session);
     if (session._tag === "Some") {
       invalidationVersions.set(session.value, (invalidationVersions.get(session.value) ?? 0) + 1);
@@ -270,7 +270,7 @@ export function createFileMetadataAtoms<R, E>(
     file: { relativePath: string; byteLength: number },
     isCurrent?: (session: RpcSession) => boolean,
   ) {
-    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const supervisor = yield* MachineSupervisor.MachineSupervisor;
     const session = yield* SubscriptionRef.get(supervisor.session);
     if (session._tag === "None") return;
     const path = resolveWorkspaceFilePath(file.relativePath, cwd);
@@ -297,9 +297,9 @@ export function createFileMetadataAtoms<R, E>(
       seed: (
         result: A,
         isCurrent: (session: RpcSession) => boolean,
-      ) => Effect.Effect<void, never, EnvironmentSupervisor.EnvironmentSupervisor>,
+      ) => Effect.Effect<void, never, MachineSupervisor.MachineSupervisor>,
     ) {
-      const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+      const supervisor = yield* MachineSupervisor.MachineSupervisor;
       const session = yield* SubscriptionRef.get(supervisor.session);
       const version = session._tag === "Some" ? (invalidationVersions.get(session.value) ?? 0) : 0;
       const result = yield* read;

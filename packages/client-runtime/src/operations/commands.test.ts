@@ -31,7 +31,7 @@ import {
   PrimaryConnectionTarget,
   type PreparedConnection,
 } from "../connection/model.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import { v2Now, v2Projection, v2ThreadId } from "../state/orchestrationV2TestFixtures.ts";
@@ -58,7 +58,7 @@ const TARGET = new PrimaryConnectionTarget({
   wsBaseUrl: "wss://machine.example.test",
 });
 
-const makeSupervisor = Effect.fn("TestEnvironmentCommands.makeSupervisor")(function* (input: {
+const makeSupervisor = Effect.fn("TestMachineCommands.makeSupervisor")(function* (input: {
   readonly commands: OrchestrationV2Command[];
   readonly projects: ProjectMutation[];
   readonly launches?: OrchestrationV2ThreadLaunchInput[];
@@ -125,7 +125,7 @@ const makeSupervisor = Effect.fn("TestEnvironmentCommands.makeSupervisor")(funct
     probe: Effect.void,
     closed: Effect.never,
   };
-  return EnvironmentSupervisor.EnvironmentSupervisor.of({
+  return MachineSupervisor.MachineSupervisor.of({
     target: TARGET,
     state: yield* SubscriptionRef.make(AVAILABLE_CONNECTION_STATE),
     session: yield* SubscriptionRef.make(Option.some(session)),
@@ -133,7 +133,7 @@ const makeSupervisor = Effect.fn("TestEnvironmentCommands.makeSupervisor")(funct
     connect: Effect.void,
     disconnect: Effect.void,
     retryNow: Effect.void,
-  } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+  } satisfies MachineSupervisor.MachineSupervisor["Service"]);
 });
 
 describe("V2 machine commands", () => {
@@ -146,11 +146,11 @@ describe("V2 machine commands", () => {
         commandId: CommandId.make("send-selected"),
         threadId,
         runId: RunId.make("selected"),
-      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+      }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
       yield* resumeThreadQueue({
         commandId: CommandId.make("resume-queue"),
         threadId,
-      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+      }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
 
       expect(commands).toEqual([
         { type: "queued-run.start", commandId: "send-selected", threadId, runId: "selected" },
@@ -167,7 +167,7 @@ describe("V2 machine commands", () => {
       yield* archiveThread({
         commandId: CommandId.make("queued-command"),
         threadId: ThreadId.make("thread-1"),
-      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+      }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
 
       expect(commands).toEqual([
         { type: "thread.archive", commandId: "queued-command", threadId: "thread-1" },
@@ -205,7 +205,7 @@ describe("V2 machine commands", () => {
         commandId: CommandId.make("rollback-thread-start"),
         threadId: v2ThreadId,
         turnCount: 0,
-      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+      }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
 
       expect(commands).toEqual([
         {
@@ -248,7 +248,7 @@ describe("V2 machine commands", () => {
             createdAt: "2026-06-20T00:00:00.000Z",
           },
         },
-      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+      }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
 
       expect(launches[0]).toMatchObject({
         threadId: v2ThreadId,
@@ -287,7 +287,7 @@ describe("V2 machine commands", () => {
           runtimeMode: "full-access",
           interactionMode: "default",
           dispatchMode: mode,
-        }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+        }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
 
         expect(commands.at(-1)).toMatchObject({
           type: "message.dispatch",
@@ -352,7 +352,7 @@ describe("V2 machine commands", () => {
           runtimeMode: "full-access",
           interactionMode: "default",
           dispatchMode: mode,
-        }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+        }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
 
         expect(commands.at(-1)).toMatchObject({
           type: "message.dispatch",
@@ -401,7 +401,7 @@ describe("V2 machine commands", () => {
       const supervisor = yield* makeSupervisor({ commands, projects: [], projection });
 
       yield* interruptThreadTurn({ threadId: v2ThreadId }).pipe(
-        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+        Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
       );
 
       expect(commands).toEqual([
@@ -469,7 +469,7 @@ describe("V2 machine commands", () => {
         const supervisor = yield* makeSupervisor({ commands, projects: [], projection });
 
         const result = yield* interruptThreadTurn({ threadId: v2ThreadId }).pipe(
-          Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+          Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
         );
 
         expect(result).toEqual({ sequence: status === "rolled_back" ? 0 : 1 });
@@ -529,7 +529,7 @@ describe("V2 machine commands", () => {
           threadId: v2ThreadId,
           checkpointId,
           scopeId,
-        }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+        }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
 
         if (status === "ready") {
           yield* rollback;
@@ -593,7 +593,7 @@ describe("V2 machine commands", () => {
           commandId: CommandId.make("native-stop"),
           threadId: v2ThreadId,
           subagentId,
-        }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+        }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
         expect(commands).toEqual([
           {
             type: "subagent.stop",
@@ -651,7 +651,7 @@ describe("V2 machine commands", () => {
           subagentId,
           // A parent run must not be interrupted on the child thread.
           runId,
-        }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+        }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
         expect(commands).toEqual([
           {
             type: "subagent.stop",
@@ -679,7 +679,7 @@ describe("V2 machine commands", () => {
       const result = yield* interruptThreadTurn({
         commandId: CommandId.make("stop-outside-history-window"),
         threadId: v2ThreadId,
-      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+      }).pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
 
       expect(result).toEqual({ sequence: 1 });
       expect(projectionRequests).toEqual([]);

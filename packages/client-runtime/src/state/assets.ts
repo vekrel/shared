@@ -20,11 +20,11 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineRegistry from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import { request } from "../rpc/client.ts";
 import type { ProjectFaviconCache, ProjectFaviconTarget } from "../projectFaviconCache.ts";
-import { createEnvironmentQueryAtomFamily } from "./runtime.ts";
+import { createMachineQueryAtomFamily } from "./runtime.ts";
 
 const ASSET_URL_REFRESH_INTERVAL_MS = 30 * 60_000;
 const ASSET_URL_STALE_TIME_MS = 5 * 60_000;
@@ -129,9 +129,9 @@ export function assetUrlStateFromResult(
   };
 }
 
-export function createAssetEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, E>,
-  localMediaEnvironment?: Atom.Atom<{
+export function createAssetMachineAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry.MachineRegistry | R, E>,
+  localMediaMachine?: Atom.Atom<{
     readonly machineId: MachineId;
     readonly httpBaseUrl: string;
   } | null>,
@@ -141,10 +141,10 @@ export function createAssetEnvironmentAtoms<R, E>(
     if (Result.isSuccess(result)) return result.success;
     const error = result.failure;
     const resource = input.resource;
-    const local = localMediaEnvironment
-      ? (yield* AtomRegistry.AtomRegistry).get(localMediaEnvironment)
+    const local = localMediaMachine
+      ? (yield* AtomRegistry.AtomRegistry).get(localMediaMachine)
       : null;
-    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const supervisor = yield* MachineSupervisor.MachineSupervisor;
     if (
       !local ||
       local.machineId === supervisor.target.machineId ||
@@ -158,21 +158,21 @@ export function createAssetEnvironmentAtoms<R, E>(
       mediaMimeTypeFromExtension(resource.path.slice(resource.path.lastIndexOf("."))) === null
     )
       return yield* error;
-    const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+    const registry = yield* MachineRegistry.MachineRegistry;
     // Map the full cause so retry defects and interruption survive.
     const asset = yield* registry
       .run(local.machineId, request(WS_METHODS.assetsCreateUrl, input))
       .pipe(Effect.catchCause((cause) => Effect.failCause(Cause.map(cause, () => error))));
     return { ...asset, relativeUrl: new URL(asset.relativeUrl, local.httpBaseUrl).href };
   });
-  const createUrl = createEnvironmentQueryAtomFamily(runtime, {
+  const createUrl = createMachineQueryAtomFamily(runtime, {
     label: "machine-data:assets:create-url",
     execute,
     staleTimeMs: ASSET_URL_STALE_TIME_MS,
     idleTtlMs: ASSET_URL_IDLE_TTL_MS,
     refreshIntervalMs: ASSET_URL_REFRESH_INTERVAL_MS,
     refreshTrigger: ({ input }) =>
-      input.resource._tag === "media-file" ? localMediaEnvironment : undefined,
+      input.resource._tag === "media-file" ? localMediaMachine : undefined,
   });
   const createUrlsFamily = Atom.family((key: string) => {
     const [machineId, resources] = parseAssetCollectionKey(key);

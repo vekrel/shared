@@ -8,7 +8,7 @@ import {
   getDefaultCloneUrl,
   normalizePastedCloneUrl,
 } from "./projects.ts";
-import type { EnvironmentProject } from "../state/models.ts";
+import type { MachineProject } from "../state/models.ts";
 
 describe("add project shared logic", () => {
   it("routes owner/repository shorthand to GitHub over HTTPS", () => {
@@ -72,7 +72,7 @@ describe("add project shared logic", () => {
   it("finds existing projects by normalized path in the target machine", () => {
     const env = MachineId.make("env");
     const other = MachineId.make("other");
-    const projects: EnvironmentProject[] = [
+    const projects: MachineProject[] = [
       {
         machineId: other,
         id: ProjectId.make("same-path-other-env"),

@@ -1,7 +1,7 @@
 import { MachineId } from "@vekrel/contracts";
 import {
   type RelayClientDeviceRecord,
-  type RelayClientEnvironmentRecord,
+  type RelayClientMachineRecord,
 } from "@vekrel/contracts/relay";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -29,7 +29,7 @@ const machine = {
     providerKind: "cloudflare_tunnel",
   },
   linkedAt: "2026-06-01T00:00:00.000Z",
-} satisfies RelayClientEnvironmentRecord;
+} satisfies RelayClientMachineRecord;
 
 const device = {
   deviceId: "device-1",

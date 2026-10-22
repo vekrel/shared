@@ -19,14 +19,14 @@ import {
   type ThreadCheckpointSummary,
 } from "./threadCheckpoints.ts";
 import type {
-  EnvironmentThread,
-  EnvironmentThreadStructure,
+  MachineThread,
+  MachineThreadStructure,
   ThreadStructure,
   ThreadStructureThread,
   ThreadStructureTurnItem,
   ThreadStructureVisibleTurnItem,
 } from "./models.ts";
-import { EMPTY_ENVIRONMENT_THREAD_STATE, type EnvironmentThreadState } from "./threadState.ts";
+import { EMPTY_MACHINE_THREAD_STATE, type MachineThreadState } from "./threadState.ts";
 import {
   createQuestionHistoryProjector,
   derivePendingThreadRequests,
@@ -184,18 +184,18 @@ export function sameThreadStructure(
   return true;
 }
 
-export function createEnvironmentThreadDetailAtoms<E>(
+export function createMachineThreadDetailAtoms<E>(
   threadStateAtom: (
     machineId: ScopedThreadRef["machineId"],
     threadId: ScopedThreadRef["threadId"],
-  ) => Atom.Atom<AsyncResult.AsyncResult<EnvironmentThreadState, E>>,
+  ) => Atom.Atom<AsyncResult.AsyncResult<MachineThreadState, E>>,
 ) {
   const threadStateValueAtomFamily = Atom.family((key: string) => {
     const ref = parseThreadKey(key);
     return Atom.make((get) =>
       Option.getOrElse(
         AsyncResult.value(get(threadStateAtom(ref.machineId, ref.threadId))),
-        () => EMPTY_ENVIRONMENT_THREAD_STATE,
+        () => EMPTY_MACHINE_THREAD_STATE,
       ),
     ).pipe(Atom.setIdleTTL(0), Atom.withLabel(`machine-thread-state-value:${key}`));
   });
@@ -203,7 +203,7 @@ export function createEnvironmentThreadDetailAtoms<E>(
   const threadAtomFamily = Atom.family((key: string) => {
     const ref = parseThreadKey(key);
     let previousProjection: OrchestrationV2ThreadProjection | null = null;
-    let previousValue: EnvironmentThread | null = null;
+    let previousValue: MachineThread | null = null;
     return Atom.make((get) => {
       const projection = Option.getOrNull(get(threadStateValueAtomFamily(key)).data);
       if (projection === previousProjection) return previousValue;
@@ -218,7 +218,7 @@ export function createEnvironmentThreadDetailAtoms<E>(
   // exist and their status) keep the previous value through those updates.
   const quietThreadAtomFamily = Atom.family((key: string) => {
     let previousProjection: OrchestrationV2ThreadProjection | null = null;
-    let previous: EnvironmentThreadStructure | null = null;
+    let previous: MachineThreadStructure | null = null;
     return Atom.make((get) => {
       const next = get(threadAtomFamily(key));
       if (next === null) {

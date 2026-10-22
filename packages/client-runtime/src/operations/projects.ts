@@ -1,4 +1,4 @@
-import type { EnvironmentConnectionPhase } from "../connection/presentation.ts";
+import type { MachineConnectionPhase } from "../connection/presentation.ts";
 import type {
   CommandId,
   MachineId,
@@ -23,23 +23,23 @@ import {
   isUnsupportedWindowsProjectPath,
   resolveProjectPathForDispatch,
 } from "../state/projects.ts";
-import type { EnvironmentProject } from "../state/models.ts";
+import type { MachineProject } from "../state/models.ts";
 import { sourceControlClients } from "../sourceControlClients.ts";
 import type { SourceControlClientDefinition } from "../sourceControlClients.ts";
 
 export type AddProjectRemoteSource = SourceControlProviderKind | "url";
 
-export function canCreateProjectInEnvironment(
-  connectionPhase: EnvironmentConnectionPhase | null | undefined,
+export function canCreateProjectInMachine(
+  connectionPhase: MachineConnectionPhase | null | undefined,
 ): boolean {
   return connectionPhase === "connected";
 }
 
 export function availableScratchWorkspaceRoot(
-  connectionPhase: EnvironmentConnectionPhase | null | undefined,
+  connectionPhase: MachineConnectionPhase | null | undefined,
   serverConfig: Pick<ServerConfig, "scratchWorkspaceRoot"> | null | undefined,
 ): string | null {
-  return canCreateProjectInEnvironment(connectionPhase)
+  return canCreateProjectInMachine(connectionPhase)
     ? (serverConfig?.scratchWorkspaceRoot ?? null)
     : null;
 }
@@ -267,10 +267,10 @@ export function resolveAddProjectPath(input: {
 }
 
 export function findExistingAddProject(input: {
-  readonly projects: ReadonlyArray<EnvironmentProject>;
+  readonly projects: ReadonlyArray<MachineProject>;
   readonly machineId: MachineId;
   readonly path: string;
-}): EnvironmentProject | null {
+}): MachineProject | null {
   return (
     findProjectByPath(
       input.projects.filter((project) => project.machineId === input.machineId),

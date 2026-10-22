@@ -8,12 +8,12 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
 
-export interface EnvironmentThreadSearchMatch extends OrchestrationThreadSearchMatch {
+export interface MachineThreadSearchMatch extends OrchestrationThreadSearchMatch {
   readonly machineId: MachineId;
 }
 
 export interface ThreadSearchResultsState {
-  readonly matches: ReadonlyArray<EnvironmentThreadSearchMatch>;
+  readonly matches: ReadonlyArray<MachineThreadSearchMatch>;
   readonly isLoading: boolean;
 }
 
@@ -37,7 +37,7 @@ function parseThreadSearchKey(key: string) {
 }
 
 export function threadSearchMatchKey(
-  match: Pick<EnvironmentThreadSearchMatch, "machineId" | "threadId">,
+  match: Pick<MachineThreadSearchMatch, "machineId" | "threadId">,
 ): string {
   return JSON.stringify([match.machineId, match.threadId]);
 }
@@ -57,7 +57,7 @@ export function createThreadSearchResultsAtomFamily<E>(options: {
       }
 
       const [machineIds, query] = parsedKey.value;
-      const matches: EnvironmentThreadSearchMatch[] = [];
+      const matches: MachineThreadSearchMatch[] = [];
       let isLoading = false;
 
       for (const machineId of machineIds) {

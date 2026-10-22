@@ -8,7 +8,7 @@ import { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
 
 import * as ConnectionResolver from "./resolver.ts";
 import * as ConnectionDriver from "./driver.ts";
-import * as EnvironmentRegistry from "./registry.ts";
+import * as MachineRegistry from "./registry.ts";
 import * as ConnectionOnboarding from "./onboarding.ts";
 import { connectionRoutes, hasRelayRoute } from "./routes.ts";
 import * as PlatformConnectionSource from "../platform/source.ts";
@@ -18,7 +18,7 @@ import * as RpcSession from "../rpc/session.ts";
 
 export const watchDiscoveredCompatibility = Effect.fn("connection.watchDiscoveredCompatibility")(
   function* () {
-    const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+    const registry = yield* MachineRegistry.MachineRegistry;
     const discovery = yield* RelayMachineDiscovery.RelayMachineDiscovery;
     const seenChecks = new Map<string, RelayMachineStatusResponse>();
     yield* Stream.merge(
@@ -75,7 +75,7 @@ export function layerWithOptions(options: RpcSession.RpcSessionOptions) {
   const layerDriver = ConnectionDriver.layer.pipe(
     Layer.provide(Layer.mergeAll(ConnectionResolver.layer, RpcSession.layer(options))),
   );
-  const layerRegistry = EnvironmentRegistry.layer.pipe(Layer.provide(layerDriver));
+  const layerRegistry = MachineRegistry.layer.pipe(Layer.provide(layerDriver));
   const layerOnboarding = ConnectionOnboarding.layer.pipe(Layer.provide(layerRegistry));
   const layerConnectionServices = Layer.mergeAll(
     layerRegistry,
@@ -85,7 +85,7 @@ export function layerWithOptions(options: RpcSession.RpcSessionOptions) {
   );
   const layerConnectionStartup = Layer.effectDiscard(
     Effect.gen(function* () {
-      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const registry = yield* MachineRegistry.MachineRegistry;
       const platformSource = yield* PlatformConnectionSource.PlatformConnectionSource;
       yield* watchDiscoveredCompatibility().pipe(Effect.forkScoped);
       yield* registry.start;

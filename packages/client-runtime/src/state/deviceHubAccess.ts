@@ -9,7 +9,7 @@ import type { HttpClient } from "effect/http";
 
 import * as RemoteMachineAuthorization from "../authorization/service.ts";
 import type { PreparedConnection } from "../connection/model.ts";
-import { environmentEndpointUrl } from "../machine/endpoint.ts";
+import { machineEndpointUrl } from "../machine/endpoint.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import type { RemoteMachineRequestError } from "../rpc/http.ts";
 import { executeAuthenticatedMachineHttpRequest } from "./machineHttpAuth.ts";
@@ -24,7 +24,7 @@ export const resolveDeviceHubAccess = Effect.fn("clientRuntime.state.resolveDevi
     readonly prepared: PreparedConnection;
     readonly hubBasePath: string;
   }): Effect.fn.Return<DeviceHubAccess, RemoteMachineRequestError, HttpClient.HttpClient> {
-    const httpBase = environmentEndpointUrl(input.prepared.httpBaseUrl, input.hubBasePath);
+    const httpBase = machineEndpointUrl(input.prepared.httpBaseUrl, input.hubBasePath);
     const wsBase = httpBase.replace(/^http/, "ws");
     if (input.prepared.httpAuthorization === null) {
       return { httpBase, wsBase, query: {}, credentials: true };

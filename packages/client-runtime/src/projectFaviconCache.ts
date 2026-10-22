@@ -119,7 +119,7 @@ export function createProjectFaviconCache(input: {
   readonly load: (url: string, signal: AbortSignal) => Promise<string>;
 }) {
   const entries = new Map<string, ProjectFaviconEntry>();
-  const environmentRevisions = new Map<MachineId, number>();
+  const machineRevisions = new Map<MachineId, number>();
   let generation = 0;
   let hydration: Promise<void> | undefined;
   let clearing: Promise<void> | undefined;
@@ -173,7 +173,7 @@ export function createProjectFaviconCache(input: {
   ): Promise<string | null> => {
     await clearing;
     const startGeneration = generation;
-    const startRevision = environmentRevisions.get(target.machineId) ?? 0;
+    const startRevision = machineRevisions.get(target.machineId) ?? 0;
     await hydrate();
     if (signal.aborted || url === null) return peek(target);
     const key = keyFor(target);
@@ -193,7 +193,7 @@ export function createProjectFaviconCache(input: {
       if (
         signal.aborted ||
         startGeneration !== generation ||
-        startRevision !== (environmentRevisions.get(target.machineId) ?? 0)
+        startRevision !== (machineRevisions.get(target.machineId) ?? 0)
       ) {
         return peek(target);
       }
@@ -223,7 +223,7 @@ export function createProjectFaviconCache(input: {
   const clear = async (machineId?: MachineId) => {
     if (machineId === undefined) generation += 1;
     else
-      environmentRevisions.set(machineId, (environmentRevisions.get(machineId) ?? 0) + 1);
+      machineRevisions.set(machineId, (machineRevisions.get(machineId) ?? 0) + 1);
     const previous = clearing;
     const task = (async () => {
       await previous;
@@ -243,7 +243,7 @@ export function createProjectFaviconCache(input: {
     hydrate,
     peek,
     resolve,
-    clearEnvironment: (machineId: MachineId) => clear(machineId),
+    clearMachine: (machineId: MachineId) => clear(machineId),
     clearAll: () => clear(),
     flush,
   };

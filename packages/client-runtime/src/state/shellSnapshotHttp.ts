@@ -24,8 +24,8 @@ import {
 // setups where /api fails but /ws works, such as a proxy that blocks /api.
 const DEFAULT_SHELL_SNAPSHOT_TIMEOUT_MS = 20_000;
 
-export const fetchEnvironmentShellSnapshot = Effect.fn(
-  "clientRuntime.state.fetchEnvironmentShellSnapshot",
+export const fetchMachineShellSnapshot = Effect.fn(
+  "clientRuntime.state.fetchMachineShellSnapshot",
 )(function* (input: {
   readonly prepared: PreparedConnection;
   readonly signer: Option.Option<ManagedRelay.ManagedRelayDpopSigner["Service"]>;
@@ -96,7 +96,7 @@ export const layer: Layer.Layer<ShellSnapshotLoader, never, HttpClient.HttpClien
     );
     return ShellSnapshotLoader.of({
       load: (prepared: PreparedConnection) =>
-        fetchEnvironmentShellSnapshot({ prepared, signer, remoteAuthorization }).pipe(
+        fetchMachineShellSnapshot({ prepared, signer, remoteAuthorization }).pipe(
           Effect.map(Option.some<DeferredShellSnapshot>),
           Effect.provideService(HttpClient.HttpClient, httpClient),
           Effect.catchCause((cause) =>

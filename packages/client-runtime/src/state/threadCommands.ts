@@ -14,8 +14,8 @@ import * as DateTime from "effect/DateTime";
 
 import {
   createAtomCommandScheduler,
-  createEnvironmentCommand,
-  createEnvironmentRpcCommand,
+  createMachineCommand,
+  createMachineRpcCommand,
 } from "./runtime.ts";
 import {
   type ArchiveThreadInput,
@@ -91,8 +91,8 @@ import {
   visitThread,
   watchThreadPullRequest,
 } from "../operations/commands.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import * as ThreadHistoryController from "./threadHistoryController.ts";
 
 export type LoadEarlierThreadHistoryInput = {
@@ -139,8 +139,8 @@ export type {
   WatchThreadPullRequestInput,
 } from "../operations/commands.ts";
 
-export function createThreadEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | Crypto.Crypto | R, E>,
+export function createThreadMachineAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry | Crypto.Crypto | R, E>,
   snapshotAtom: (machineId: MachineId) => Atom.Atom<OrchestrationV2ShellSnapshot | null>,
 ) {
   const scheduler = createAtomCommandScheduler();
@@ -152,7 +152,7 @@ export function createThreadEnvironmentAtoms<R, E>(
   const loadEarlierHistory = Effect.fn("ThreadCommands.loadEarlierHistory")(function* (
     input: LoadEarlierThreadHistoryInput,
   ) {
-    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const supervisor = yield* MachineSupervisor.MachineSupervisor;
     const controller = yield* Effect.serviceOption(ThreadHistoryController.ThreadHistoryController);
     if (Option.isNone(controller)) {
       return {
@@ -167,175 +167,175 @@ export function createThreadEnvironmentAtoms<R, E>(
   });
 
   const commands = {
-    create: createEnvironmentCommand(runtime, {
+    create: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:create",
       execute: (input: CreateThreadInput) => createThread(input),
       scheduler,
       concurrency,
     }),
-    delete: createEnvironmentCommand(runtime, {
+    delete: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:delete",
       execute: (input: DeleteThreadInput) => deleteThread(input),
       scheduler,
       concurrency,
     }),
-    archive: createEnvironmentCommand(runtime, {
+    archive: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:archive",
       execute: (input: ArchiveThreadInput) => archiveThread(input),
       scheduler,
       concurrency,
     }),
-    unarchive: createEnvironmentCommand(runtime, {
+    unarchive: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:unarchive",
       execute: (input: UnarchiveThreadInput) => unarchiveThread(input),
       scheduler,
       concurrency,
     }),
-    settle: createEnvironmentCommand(runtime, {
+    settle: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:settle",
       execute: (input: SettleThreadInput) => settleThread(input),
       scheduler,
       concurrency,
     }),
-    unsettle: createEnvironmentCommand(runtime, {
+    unsettle: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:unsettle",
       execute: (input: UnsettleThreadInput) => unsettleThread(input),
       scheduler,
       concurrency,
     }),
-    snooze: createEnvironmentCommand(runtime, {
+    snooze: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:snooze",
       execute: (input: SnoozeThreadInput) => snoozeThread(input),
       scheduler,
       concurrency,
     }),
-    unsnooze: createEnvironmentCommand(runtime, {
+    unsnooze: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:unsnooze",
       execute: (input: UnsnoozeThreadInput) => unsnoozeThread(input),
       scheduler,
       concurrency,
     }),
-    pin: createEnvironmentCommand(runtime, {
+    pin: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:pin",
       execute: (input: PinThreadInput) => pinThread(input),
       scheduler,
       concurrency,
     }),
-    unpin: createEnvironmentCommand(runtime, {
+    unpin: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:unpin",
       execute: (input: UnpinThreadInput) => unpinThread(input),
       scheduler,
       concurrency,
     }),
-    reorderPin: createEnvironmentCommand(runtime, {
+    reorderPin: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:reorder-pin",
       execute: (input: ReorderPinnedThreadInput) => reorderPinnedThread(input),
       scheduler,
       concurrency,
     }),
-    setAutoSettle: createEnvironmentCommand(runtime, {
+    setAutoSettle: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:set-auto-settle",
       execute: (input: SetThreadAutoSettleInput) => setThreadAutoSettle(input),
       scheduler,
       concurrency,
     }),
-    reorderActive: createEnvironmentCommand(runtime, {
+    reorderActive: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:reorder-active",
       execute: (input: ReorderActiveThreadInput) => reorderActiveThread(input),
       scheduler,
       concurrency,
     }),
-    visit: createEnvironmentCommand(runtime, {
+    visit: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:visit",
       execute: (input: VisitThreadInput) => visitThread(input),
       scheduler,
       concurrency,
     }),
-    markUnread: createEnvironmentCommand(runtime, {
+    markUnread: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:mark-unread",
       execute: (input: MarkThreadUnreadInput) => markThreadUnread(input),
       scheduler,
       concurrency,
     }),
-    updateMetadata: createEnvironmentCommand(runtime, {
+    updateMetadata: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:update-metadata",
       execute: (input: UpdateThreadMetadataInput) => updateThreadMetadata(input),
       scheduler,
       concurrency,
     }),
-    linkPullRequest: createEnvironmentCommand(runtime, {
+    linkPullRequest: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:link-pull-request",
       execute: (input: LinkThreadPullRequestInput) => linkThreadPullRequest(input),
       scheduler,
       concurrency,
     }),
-    unlinkPullRequest: createEnvironmentCommand(runtime, {
+    unlinkPullRequest: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:unlink-pull-request",
       execute: (input: UnlinkThreadPullRequestInput) => unlinkThreadPullRequest(input),
       scheduler,
       concurrency,
     }),
-    watchPullRequest: createEnvironmentCommand(runtime, {
+    watchPullRequest: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:watch-pull-request",
       execute: (input: WatchThreadPullRequestInput) => watchThreadPullRequest(input),
       scheduler,
       concurrency,
     }),
-    setRuntimeMode: createEnvironmentCommand(runtime, {
+    setRuntimeMode: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:set-runtime-mode",
       execute: (input: SetThreadRuntimeModeInput) => setThreadRuntimeMode(input),
       scheduler,
       concurrency,
     }),
-    setInteractionMode: createEnvironmentCommand(runtime, {
+    setInteractionMode: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:set-interaction-mode",
       execute: (input: SetThreadInteractionModeInput) => setThreadInteractionMode(input),
       scheduler,
       concurrency,
     }),
-    startTurn: createEnvironmentCommand(runtime, {
+    startTurn: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:start-turn",
       execute: (input: StartThreadTurnInput) => startThreadTurn(input),
       scheduler,
       concurrency,
     }),
-    interruptTurn: createEnvironmentCommand(runtime, {
+    interruptTurn: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:interrupt-turn",
       execute: (input: InterruptThreadTurnInput) => interruptThreadTurn(input),
       scheduler,
       concurrency,
     }),
-    respondToApproval: createEnvironmentCommand(runtime, {
+    respondToApproval: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:respond-to-approval",
       execute: (input: RespondToThreadApprovalInput) => respondToThreadApproval(input),
       scheduler,
       concurrency,
     }),
-    respondToUserInput: createEnvironmentCommand(runtime, {
+    respondToUserInput: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:respond-to-user-input",
       execute: (input: RespondToThreadUserInputInput) => respondToThreadUserInput(input),
       scheduler,
       concurrency,
     }),
-    dismissUserInput: createEnvironmentCommand(runtime, {
+    dismissUserInput: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:dismiss-user-input",
       execute: (input: DismissThreadUserInputInput) => dismissThreadUserInput(input),
       scheduler,
       concurrency,
     }),
-    revertCheckpoint: createEnvironmentCommand(runtime, {
+    revertCheckpoint: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:revert-checkpoint",
       execute: (input: RevertThreadCheckpointInput) => revertThreadCheckpoint(input),
       scheduler,
       concurrency,
     }),
-    stopSession: createEnvironmentCommand(runtime, {
+    stopSession: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:stop-session",
       execute: (input: StopThreadSessionInput) => stopThreadSession(input),
       scheduler,
       concurrency,
     }),
-    forkFromRun: createEnvironmentCommand(runtime, {
+    forkFromRun: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:fork-from-run",
       execute: (input: ForkThreadFromRunInput) => forkThreadFromRun(input),
       scheduler,
@@ -344,7 +344,7 @@ export function createThreadEnvironmentAtoms<R, E>(
         key: ({ machineId, input }) => JSON.stringify([machineId, input.sourceThreadId]),
       },
     }),
-    mergeBack: createEnvironmentCommand(runtime, {
+    mergeBack: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:merge-back",
       execute: (input: MergeThreadBackInput) => mergeThreadBack(input),
       scheduler,
@@ -354,43 +354,43 @@ export function createThreadEnvironmentAtoms<R, E>(
           JSON.stringify([machineId, input.sourceThreadId, input.targetThreadId]),
       },
     }),
-    resumeThreadQueue: createEnvironmentCommand(runtime, {
+    resumeThreadQueue: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:resume-queue",
       execute: (input: ResumeThreadQueueInput) => resumeThreadQueue(input),
       scheduler,
       concurrency,
     }),
-    reorderQueuedRun: createEnvironmentCommand(runtime, {
+    reorderQueuedRun: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:reorder-queued-run",
       execute: (input: ReorderQueuedRunInput) => reorderQueuedRun(input),
       scheduler,
       concurrency,
     }),
-    promoteQueuedRun: createEnvironmentCommand(runtime, {
+    promoteQueuedRun: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:promote-queued-run",
       execute: (input: PromoteQueuedRunInput) => promoteQueuedRun(input),
       scheduler,
       concurrency,
     }),
-    cancelQueuedRun: createEnvironmentCommand(runtime, {
+    cancelQueuedRun: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:cancel-queued-run",
       execute: (input: CancelQueuedRunInput) => cancelQueuedRun(input),
       scheduler,
       concurrency,
     }),
-    retryWorkspacePreparation: createEnvironmentCommand(runtime, {
+    retryWorkspacePreparation: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:retry-workspace-preparation",
       execute: (input: RetryWorkspacePreparationInput) => retryWorkspacePreparation(input),
       scheduler,
       concurrency,
     }),
-    editQueuedRun: createEnvironmentCommand(runtime, {
+    editQueuedRun: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:edit-queued-run",
       execute: (input: EditQueuedRunInput) => editQueuedRun(input),
       scheduler,
       concurrency,
     }),
-    loadEarlierHistory: createEnvironmentCommand(runtime, {
+    loadEarlierHistory: createMachineCommand(runtime, {
       label: "machine-data:commands:thread:load-earlier-history",
       execute: loadEarlierHistory,
       scheduler,
@@ -399,7 +399,7 @@ export function createThreadEnvironmentAtoms<R, E>(
         key: ({ machineId, input }) => JSON.stringify([machineId, input.threadId]),
       },
     }),
-    uploadFeedback: createEnvironmentRpcCommand(runtime, {
+    uploadFeedback: createMachineRpcCommand(runtime, {
       label: "machine-data:commands:thread:upload-feedback",
       tag: WS_METHODS.providerUploadFeedback,
       scheduler,

@@ -9,7 +9,7 @@ import {
   type UsageTokenTotals,
 } from "@vekrel/contracts";
 
-export interface EnvironmentUsage {
+export interface MachineUsage {
   readonly machineId: MachineId;
   readonly label: string;
   readonly summary: UsageSummary;
@@ -107,7 +107,7 @@ export interface MergedUsage {
   readonly categoryCost: CategoryCost;
   readonly speedCost: SpeedCost;
   readonly duplicateSources: readonly string[];
-  readonly contributingEnvironments: readonly MachineId[];
+  readonly contributingMachines: readonly MachineId[];
   readonly contractMismatches: readonly UsageContractMismatch[];
 }
 
@@ -140,19 +140,19 @@ function bucketKey(bucket: UsageBucket): string {
   return JSON.stringify([bucket.day, bucket.hourStart ?? null, bucket.provider, bucket.model]);
 }
 
-function claimSources(machines: readonly EnvironmentUsage[]): {
+function claimSources(machines: readonly MachineUsage[]): {
   readonly ownerByFingerprint: ReadonlyMap<string, MachineId>;
-  readonly supplementalBucketsByEnvironment: ReadonlyMap<MachineId, ReadonlySet<UsageBucket>>;
+  readonly supplementalBucketsByMachine: ReadonlyMap<MachineId, ReadonlySet<UsageBucket>>;
   readonly sessionsByFingerprint: ReadonlyMap<string, number>;
   readonly duplicates: readonly string[];
 } {
   const ownerByFingerprint = new Map<string, MachineId>();
   const ownerScanByFingerprint = new Map<
     string,
-    { machine: EnvironmentUsage; source: UsageSource }
+    { machine: MachineUsage; source: UsageSource }
   >();
   const seenBucketKeysByFingerprint = new Map<string, Set<string>>();
-  const supplementalBucketsByEnvironment = new Map<MachineId, Set<UsageBucket>>();
+  const supplementalBucketsByMachine = new Map<MachineId, Set<UsageBucket>>();
   const sessionsByFingerprint = new Map<string, number>();
   const duplicates: string[] = [];
 
@@ -198,7 +198,7 @@ function claimSources(machines: readonly EnvironmentUsage[]): {
         seenBucketKeysByFingerprint.set(key, seen);
       }
       const supplemental =
-        supplementalBucketsByEnvironment.get(machine.machineId) ?? new Set<UsageBucket>();
+        supplementalBucketsByMachine.get(machine.machineId) ?? new Set<UsageBucket>();
       let added = false;
       for (const bucket of bucketsForSource(machine.summary, source)) {
         const cell = bucketKey(bucket);
@@ -208,7 +208,7 @@ function claimSources(machines: readonly EnvironmentUsage[]): {
         added = true;
       }
       if (!added) continue;
-      supplementalBucketsByEnvironment.set(machine.machineId, supplemental);
+      supplementalBucketsByMachine.set(machine.machineId, supplemental);
       sessionsByFingerprint.set(
         key,
         Math.max(sessionsByFingerprint.get(key) ?? 0, source.distinctSessions),
@@ -218,14 +218,14 @@ function claimSources(machines: readonly EnvironmentUsage[]): {
 
   return {
     ownerByFingerprint,
-    supplementalBucketsByEnvironment,
+    supplementalBucketsByMachine,
     sessionsByFingerprint,
     duplicates,
   };
 }
 
 function ownedContribution(
-  machine: EnvironmentUsage,
+  machine: MachineUsage,
   ownerByFingerprint: ReadonlyMap<string, MachineId>,
   supplementalBuckets: ReadonlySet<UsageBucket>,
   sessionsByFingerprint: ReadonlyMap<string, number>,
@@ -301,17 +301,17 @@ const EMPTY_MERGED: MergedUsage = {
   categoryCost: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, unsplit: 0 },
   speedCost: { standard: 0, fast: 0, ultrafast: 0, premium: 0 },
   duplicateSources: [],
-  contributingEnvironments: [],
+  contributingMachines: [],
   contractMismatches: [],
 };
 
 export function mergeUsage(
-  machines: readonly EnvironmentUsage[],
+  machines: readonly MachineUsage[],
   expectedContractVersion: number,
 ): MergedUsage {
   if (machines.length === 0) return EMPTY_MERGED;
 
-  const current: EnvironmentUsage[] = [];
+  const current: MachineUsage[] = [];
   const contractMismatches: UsageContractMismatch[] = [];
   for (const machine of machines) {
     if (
@@ -332,7 +332,7 @@ export function mergeUsage(
 
   const {
     ownerByFingerprint,
-    supplementalBucketsByEnvironment,
+    supplementalBucketsByMachine,
     sessionsByFingerprint,
     duplicates,
   } = claimSources(current);
@@ -385,16 +385,16 @@ export function mergeUsage(
       byProvider: Map<UsageProviderKind, { costUsd: number; totalTokens: number }>;
     }
   >();
-  const contributingEnvironments: MachineId[] = [];
+  const contributingMachines: MachineId[] = [];
 
   for (const machine of current) {
     const { buckets, sessionsByProvider } = ownedContribution(
       machine,
       ownerByFingerprint,
-      supplementalBucketsByEnvironment.get(machine.machineId) ?? new Set(),
+      supplementalBucketsByMachine.get(machine.machineId) ?? new Set(),
       sessionsByFingerprint,
     );
-    if (buckets.length > 0) contributingEnvironments.push(machine.machineId);
+    if (buckets.length > 0) contributingMachines.push(machine.machineId);
 
     for (const [providerKind, providerSessions] of sessionsByProvider) {
       sessions += providerSessions;
@@ -589,7 +589,7 @@ export function mergeUsage(
       standard: Math.max(0, costUsd - speedCost.fast - speedCost.ultrafast),
     },
     duplicateSources: duplicates,
-    contributingEnvironments,
+    contributingMachines,
     contractMismatches,
   };
 }

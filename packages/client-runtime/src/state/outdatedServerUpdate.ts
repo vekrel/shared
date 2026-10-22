@@ -8,7 +8,7 @@ import type * as Socket from "effect/socket/Socket";
 
 import { describeOutdatedHost, updateOutdatedHost } from "../connection/outdatedHostUpdate.ts";
 import type * as ConnectionResolver from "../connection/resolver.ts";
-import type * as EnvironmentRegistry from "../connection/registry.ts";
+import type * as MachineRegistry from "../connection/registry.ts";
 import type * as RelayMachineDiscovery from "../relay/discovery.ts";
 import { createAtomCommandScheduler, createRuntimeCommand } from "./runtime.ts";
 import {
@@ -26,7 +26,7 @@ export interface OutdatedServerUpdateTarget {
 
 export function createOutdatedServerDescriptionCommand<E>(
   runtime: Atom.AtomRuntime<
-    EnvironmentRegistry.EnvironmentRegistry | ConnectionResolver.ConnectionResolver,
+    MachineRegistry.MachineRegistry | ConnectionResolver.ConnectionResolver,
     E
   >,
 ) {
@@ -39,7 +39,7 @@ export function createOutdatedServerDescriptionCommand<E>(
 
 export function createOutdatedServerUpdateCommand<E>(
   runtime: Atom.AtomRuntime<
-    | EnvironmentRegistry.EnvironmentRegistry
+    | MachineRegistry.MachineRegistry
     | ConnectionResolver.ConnectionResolver
     | RelayMachineDiscovery.RelayMachineDiscovery
     | Socket.WebSocketConstructor

@@ -17,12 +17,12 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 
-import type { EnvironmentRegistry } from "../connection/registry.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
 import * as Persistence from "../platform/persistence.ts";
 import { runStreamGuarded, RpcPermissionGuard } from "../rpc/client.ts";
 import {
   createRuntimeCommand,
-  runStreamInEnvironment,
+  runStreamInMachine,
   type AtomCommand,
   type AtomCommandResult,
 } from "./runtime.ts";
@@ -413,7 +413,7 @@ export function applyVcsActionProgressEvent(
 }
 
 export function createVcsActionManager<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | Persistence.EnvironmentCacheStore | R, E>,
+  runtime: Atom.AtomRuntime<MachineRegistry | Persistence.MachineCacheStore | R, E>,
 ) {
   const runStackedActionCommands = new Map<
     string,
@@ -435,7 +435,7 @@ export function createVcsActionManager<R, E>(
     const target = targetKey === null ? null : parseVcsActionTargetKey(targetKey);
     const stateAtom = targetKey === null ? EMPTY_VCS_ACTION_ATOM : vcsActionStateAtom(targetKey);
     const command = createRuntimeCommand<
-      EnvironmentRegistry | Persistence.EnvironmentCacheStore | R,
+      MachineRegistry | Persistence.MachineCacheStore | R,
       E,
       RunVcsStackedActionInput,
       GitRunStackedActionResult,
@@ -481,7 +481,7 @@ export function createVcsActionManager<R, E>(
           }
         });
         return consumeVcsActionProgress(
-          runStreamInEnvironment(
+          runStreamInMachine(
             target.machineId,
             runStreamGuarded(WS_METHODS.gitRunStackedAction, rpcInput),
           ),

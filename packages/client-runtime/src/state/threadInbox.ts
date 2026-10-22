@@ -1,8 +1,8 @@
-import { threadRuntimeIsActive, type EnvironmentThreadShell } from "./models.ts";
+import { threadRuntimeIsActive, type MachineThreadShell } from "./models.ts";
 import { toSortableTimestamp } from "./threadSort.ts";
 
 type WorkingThreadInput = Pick<
-  EnvironmentThreadShell,
+  MachineThreadShell,
   | "hasActionableProposedPlan"
   | "hasPendingApprovals"
   | "hasPendingUserInput"
@@ -29,7 +29,7 @@ export function isThreadWorking(thread: WorkingThreadInput): boolean {
 }
 
 type InboxThreadInput = Pick<
-  EnvironmentThreadShell,
+  MachineThreadShell,
   "id" | "machineId" | "createdAt" | "unsettledAt" | "latestRun"
 >;
 
@@ -53,7 +53,7 @@ export function sortInboxThreadsByReturn<T extends InboxThreadInput>(
 }
 
 type WorkingSortInput = Pick<
-  EnvironmentThreadShell,
+  MachineThreadShell,
   "id" | "machineId" | "createdAt" | "latestRun" | "latestUserAuthoredMessageAt"
 >;
 
@@ -74,7 +74,7 @@ export function sortWorkingThreadsBySend<T extends WorkingSortInput>(threads: re
   return sortNewestFirst(threads, timestamps);
 }
 
-function sortNewestFirst<T extends Pick<EnvironmentThreadShell, "id" | "machineId">>(
+function sortNewestFirst<T extends Pick<MachineThreadShell, "id" | "machineId">>(
   threads: readonly T[],
   timestamps: ReadonlyMap<T, number>,
 ): T[] {
@@ -92,7 +92,7 @@ function sortNewestFirst<T extends Pick<EnvironmentThreadShell, "id" | "machineI
  * null to reset while the beta is off.
  */
 export function createInboxReturnTracker() {
-  const keyOf = (thread: Pick<EnvironmentThreadShell, "machineId" | "id">) =>
+  const keyOf = (thread: Pick<MachineThreadShell, "machineId" | "id">) =>
     `${thread.machineId}:${thread.id}`;
   let lastWorkingKeys: ReadonlySet<string> | null = null;
   const returns = new Map<string, number>();
@@ -120,7 +120,7 @@ export function createInboxReturnTracker() {
       }
       lastWorkingKeys = working;
     },
-    returnedAt: (thread: Pick<EnvironmentThreadShell, "machineId" | "id">) =>
+    returnedAt: (thread: Pick<MachineThreadShell, "machineId" | "id">) =>
       returns.get(keyOf(thread)),
   };
 }

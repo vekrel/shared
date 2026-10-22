@@ -1,6 +1,6 @@
 import type { UsageProviderKind, UsageSummary } from "@vekrel/contracts";
 
-interface UsageProgressEnvironment {
+interface UsageProgressMachine {
   readonly label: string;
   readonly isConnected: boolean;
   readonly isPending: boolean;
@@ -8,8 +8,8 @@ interface UsageProgressEnvironment {
   readonly summary: UsageSummary | null;
 }
 
-export function usageEnvironmentProgress(
-  machine: UsageProgressEnvironment,
+export function usageMachineProgress(
+  machine: UsageProgressMachine,
   refreshing = false,
 ) {
   const { summary } = machine;
@@ -37,7 +37,7 @@ export function updatingProvidersLabel(
 }
 
 export function usageProgress(
-  machines: readonly UsageProgressEnvironment[],
+  machines: readonly UsageProgressMachine[],
   {
     refreshing = false,
     providerLabel,
@@ -48,7 +48,7 @@ export function usageProgress(
 ) {
   const progress = machines.map((machine) => ({
     label: machine.label,
-    ...usageEnvironmentProgress(machine, refreshing),
+    ...usageMachineProgress(machine, refreshing),
   }));
   const waiting = progress.filter(({ phase }) => phase === "loading" || phase === "stale");
   const providers = [
@@ -71,13 +71,13 @@ export function usageProgress(
 }
 
 export function usageLoadingState(
-  machines: readonly UsageProgressEnvironment[],
+  machines: readonly UsageProgressMachine[],
   refreshing = false,
 ) {
   const providers = new Set<UsageProviderKind>();
   let everyProvider = false;
   for (const machine of machines) {
-    const progress = usageEnvironmentProgress(machine, refreshing);
+    const progress = usageMachineProgress(machine, refreshing);
     if (progress.phase === "loading" || progress.phase === "stale") everyProvider = true;
     if (progress.phase === "partway")
       for (const provider of progress.providers) providers.add(provider);

@@ -8,7 +8,7 @@ import {
 } from "@vekrel/contracts";
 import type { ClientSettings } from "@vekrel/contracts/settings";
 
-import type { EnvironmentProject } from "./models.ts";
+import type { MachineProject } from "./models.ts";
 import { normalizeProjectPathForComparison } from "./projects.ts";
 
 const SCRATCH_PROJECT_SCOPE_KEY = "\0no-project";
@@ -42,7 +42,7 @@ function uniqueNonEmptyValues(values: ReadonlyArray<string | null | undefined>):
 }
 
 function deriveRepositoryRelativeProjectPath(
-  project: Pick<EnvironmentProject, "workspaceRoot" | "repositoryIdentity">,
+  project: Pick<MachineProject, "workspaceRoot" | "repositoryIdentity">,
 ): string | null {
   const rootPath = project.repositoryIdentity?.rootPath?.trim();
   if (!rootPath) {
@@ -73,25 +73,25 @@ export function derivePhysicalProjectKeyFromPath(machineId: string, cwd: string)
 }
 
 export function derivePhysicalProjectKey(
-  project: Pick<EnvironmentProject, "machineId" | "workspaceRoot">,
+  project: Pick<MachineProject, "machineId" | "workspaceRoot">,
 ): string {
   return derivePhysicalProjectKeyFromPath(project.machineId, project.workspaceRoot);
 }
 
 export function deriveProjectGroupingOverrideKey(
-  project: Pick<EnvironmentProject, "machineId" | "workspaceRoot">,
+  project: Pick<MachineProject, "machineId" | "workspaceRoot">,
 ): string {
   return derivePhysicalProjectKey(project);
 }
 
 export function getProjectOrderKey(
-  project: Pick<EnvironmentProject, "machineId" | "workspaceRoot">,
+  project: Pick<MachineProject, "machineId" | "workspaceRoot">,
 ): string {
   return derivePhysicalProjectKey(project);
 }
 
 function resolveProjectGroupingMode(
-  project: Pick<EnvironmentProject, "machineId" | "workspaceRoot">,
+  project: Pick<MachineProject, "machineId" | "workspaceRoot">,
   settings: ProjectGroupingSettings,
 ): SidebarProjectGroupingMode {
   return (
@@ -101,7 +101,7 @@ function resolveProjectGroupingMode(
 }
 
 function deriveRepositoryScopedKey(
-  project: Pick<EnvironmentProject, "workspaceRoot" | "repositoryIdentity">,
+  project: Pick<MachineProject, "workspaceRoot" | "repositoryIdentity">,
   groupingMode: SidebarProjectGroupingMode,
 ): string | null {
   const canonicalKey = project.repositoryIdentity
@@ -128,7 +128,7 @@ function deriveRepositoryScopedKey(
 
 function deriveLogicalProjectKey(
   project: Pick<
-    EnvironmentProject,
+    MachineProject,
     "machineId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch"
   >,
   options?: {
@@ -151,7 +151,7 @@ function deriveLogicalProjectKey(
 
 export function deriveLogicalProjectKeyFromSettings(
   project: Pick<
-    EnvironmentProject,
+    MachineProject,
     "machineId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch"
   >,
   settings: ProjectGroupingSettings,
@@ -167,7 +167,7 @@ export function resolveScratchProjectScopeKey(
   key: string | null,
   projects: ReadonlyArray<
     Pick<
-      EnvironmentProject,
+      MachineProject,
       "machineId" | "id" | "workspaceRoot" | "repositoryIdentity" | "isScratch"
     >
   >,
@@ -199,8 +199,8 @@ export function resolveScratchProjectScopeKey(
 }
 
 export function deriveProjectGroupLabel(input: {
-  readonly representative: Pick<EnvironmentProject, "title" | "repositoryIdentity">;
-  readonly members: ReadonlyArray<Pick<EnvironmentProject, "title" | "repositoryIdentity">>;
+  readonly representative: Pick<MachineProject, "title" | "repositoryIdentity">;
+  readonly members: ReadonlyArray<Pick<MachineProject, "title" | "repositoryIdentity">>;
 }): string {
   const sharedTitles = uniqueNonEmptyValues(input.members.map((member) => member.title));
   const sharedDisplayNames = uniqueNonEmptyValues(
@@ -231,12 +231,12 @@ export function deriveProjectGroupLabel(input: {
   return input.representative.title;
 }
 
-export interface ProjectGroupMember<TProject extends EnvironmentProject = EnvironmentProject> {
+export interface ProjectGroupMember<TProject extends MachineProject = MachineProject> {
   readonly physicalProjectKey: string;
   readonly project: TProject;
 }
 
-export interface ProjectGroup<TProject extends EnvironmentProject = EnvironmentProject> {
+export interface ProjectGroup<TProject extends MachineProject = MachineProject> {
   readonly key: string;
   readonly label: string;
   readonly representative: TProject;
@@ -244,7 +244,7 @@ export interface ProjectGroup<TProject extends EnvironmentProject = EnvironmentP
   readonly memberProjectRefs: ReadonlyArray<ScopedProjectRef>;
 }
 
-function projectFreshnessTime(project: EnvironmentProject): number {
+function projectFreshnessTime(project: MachineProject): number {
   const updatedAtTime = Date.parse(project.updatedAt);
   if (Number.isFinite(updatedAtTime)) {
     return updatedAtTime;
@@ -253,7 +253,7 @@ function projectFreshnessTime(project: EnvironmentProject): number {
   return Number.isFinite(createdAtTime) ? createdAtTime : 0;
 }
 
-function shouldReplacePhysicalProjectWinner<TProject extends EnvironmentProject>(
+function shouldReplacePhysicalProjectWinner<TProject extends MachineProject>(
   existing: TProject,
   candidate: TProject,
 ): boolean {
@@ -261,7 +261,7 @@ function shouldReplacePhysicalProjectWinner<TProject extends EnvironmentProject>
   return freshnessDelta > 0 || (freshnessDelta === 0 && candidate.id > existing.id);
 }
 
-function selectProjectIdentitySource<TProject extends EnvironmentProject>(
+function selectProjectIdentitySource<TProject extends MachineProject>(
   projects: ReadonlyArray<TProject>,
   winner: TProject,
 ): TProject {
@@ -284,7 +284,7 @@ function selectProjectIdentitySource<TProject extends EnvironmentProject>(
   return freshestIdentifiedProject ?? winner;
 }
 
-export function buildProjectGroups<TProject extends EnvironmentProject>(input: {
+export function buildProjectGroups<TProject extends MachineProject>(input: {
   readonly projects: ReadonlyArray<TProject>;
   readonly settings: ProjectGroupingSettings;
   readonly preferredMachineId?: MachineId | null;

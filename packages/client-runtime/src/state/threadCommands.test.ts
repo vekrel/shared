@@ -20,10 +20,10 @@ import * as Queue from "effect/Queue";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom, AtomRegistry } from "effect/reactivity";
 
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineRegistry from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import { createThreadEnvironmentAtoms } from "./threadCommands.ts";
+import { createThreadMachineAtoms } from "./threadCommands.ts";
 
 const MACHINE_ID = MachineId.make("remote");
 const THREAD_ID = ThreadId.make("thread");
@@ -85,7 +85,7 @@ const makeHarness = Effect.fn("TestThreadCommands.makeHarness")(function* () {
     command: OrchestrationV2Command;
     reply: Deferred.Deferred<{ sequence: number }, Error>;
   }>();
-  const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+  const supervisor = MachineSupervisor.MachineSupervisor.of({
     target: { machineId: MACHINE_ID },
     session: yield* SubscriptionRef.make(
       Option.some({
@@ -99,13 +99,13 @@ const makeHarness = Effect.fn("TestThreadCommands.makeHarness")(function* () {
         },
       } as unknown as RpcSession),
     ),
-  } as EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+  } as MachineSupervisor.MachineSupervisor["Service"]);
   const runtime = Atom.runtime(
     Layer.mergeAll(
-      Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, {
-        run: (_environmentId, effect) =>
-          Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-      } as EnvironmentRegistry.EnvironmentRegistry["Service"]),
+      Layer.succeed(MachineRegistry.MachineRegistry, {
+        run: (_machineId, effect) =>
+          Effect.provideService(effect, MachineSupervisor.MachineSupervisor, supervisor),
+      } as MachineRegistry.MachineRegistry["Service"]),
       Layer.succeed(
         Crypto.Crypto,
         Crypto.make({
@@ -115,8 +115,8 @@ const makeHarness = Effect.fn("TestThreadCommands.makeHarness")(function* () {
       ),
     ),
   );
-  const snapshotAtom = Atom.family((_environmentId: MachineId) => Atom.make(SNAPSHOT));
-  const commands = createThreadEnvironmentAtoms(runtime, snapshotAtom);
+  const snapshotAtom = Atom.family((_machineId: MachineId) => Atom.make(SNAPSHOT));
+  const commands = createThreadMachineAtoms(runtime, snapshotAtom);
   const registry = AtomRegistry.make();
   yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
   const visibleAtom = commands.snapshotAtom(MACHINE_ID);
@@ -277,13 +277,13 @@ describe("remote thread lifecycle commands", () => {
   it.effect("isolates machines and does not restore a remotely removed thread", () =>
     Effect.gen(function* () {
       const h = yield* makeHarness();
-      const otherEnvironment = MachineId.make("other-remote");
+      const otherMachine = MachineId.make("other-remote");
       const result = h.commands.settle.run(h.registry, {
         machineId: MACHINE_ID,
         input: { threadId: THREAD_ID },
       });
       const request = yield* Queue.take(h.requests);
-      expect(h.registry.get(h.commands.snapshotAtom(otherEnvironment))).toBe(SNAPSHOT);
+      expect(h.registry.get(h.commands.snapshotAtom(otherMachine))).toBe(SNAPSHOT);
       const removed = { ...SNAPSHOT, snapshotSequence: 2, threads: [] };
       h.registry.set(h.snapshotAtom(MACHINE_ID), removed);
       expect(h.registry.get(h.visibleAtom)?.threads).toEqual([]);

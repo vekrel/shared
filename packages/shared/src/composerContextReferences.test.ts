@@ -12,7 +12,7 @@ import {
   isImageReferencesOnly,
   parseComposerContextHref,
   projectComposerContextForProvider,
-  threadContextsOutsideEnvironment,
+  threadContextsOutsideMachine,
   toComposerContextId,
   toKindScopedComposerContextId,
 } from "./composerContextReferences.ts";
@@ -266,7 +266,7 @@ describe("provider projection", () => {
   });
 });
 
-describe("threadContextsOutsideEnvironment", () => {
+describe("threadContextsOutsideMachine", () => {
   it("returns only referenced foreign threads, ignoring local and removed references", () => {
     const local = {
       version: 1 as const,
@@ -292,14 +292,14 @@ describe("threadContextsOutsideEnvironment", () => {
     const localReference = "[Local](t3-context://v1/thread/thread_local)";
 
     expect(
-      threadContextsOutsideEnvironment({
+      threadContextsOutsideMachine({
         text: `${localReference} [Foreign](t3-context://v1/thread/thread_foreign)`,
         records,
         machineId: local.machineId,
       }),
     ).toEqual([foreign]);
     expect(
-      threadContextsOutsideEnvironment({
+      threadContextsOutsideMachine({
         text: localReference,
         records,
         machineId: local.machineId,

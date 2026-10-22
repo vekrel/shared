@@ -35,7 +35,7 @@ import {
   preparePairingRegistration,
   prepareSshRegistration,
 } from "./onboarding.ts";
-import * as EnvironmentRegistry from "./registry.ts";
+import * as MachineRegistry from "./registry.ts";
 import * as ConnectionProfileStore from "./profileStore.ts";
 import * as ConnectionWakeups from "./wakeups.ts";
 
@@ -112,7 +112,7 @@ function layerPairingHttp(
         return Promise.resolve(
           Response.json(
             {
-              _tag: "EnvironmentRequestInvalidError",
+              _tag: "MachineRequestInvalidError",
               code: "invalid_request",
               reason: "scope_not_granted",
               traceId: "pairing-scope-test",
@@ -166,7 +166,7 @@ function layerPairingOnboarding(options?: Parameters<typeof layerPairingHttp>[1]
       register: () => Effect.void,
       setEnabled: () => Effect.void,
     }),
-    Layer.mock(Persistence.EnvironmentCacheStore)({}),
+    Layer.mock(Persistence.MachineCacheStore)({}),
     Layer.mock(ConnectionProfileStore.ConnectionProfileStore)({}),
     Layer.mock(ConnectionCredentialStore.ConnectionCredentialStore)({}),
     Layer.mock(ClientCapabilities.SshMachineGateway)({}),
@@ -181,7 +181,7 @@ function layerPairingOnboarding(options?: Parameters<typeof layerPairingHttp>[1]
     ),
   );
   return Onboarding.layer.pipe(
-    Layer.provideMerge(EnvironmentRegistry.layer.pipe(Layer.provideMerge(dependencies))),
+    Layer.provideMerge(MachineRegistry.layer.pipe(Layer.provideMerge(dependencies))),
   );
 }
 
@@ -199,8 +199,8 @@ const UNSUPPORTED_ERROR = new ConnectionBlockedError({
   detail: "The saved server used an incompatible orchestration protocol.",
 });
 
-const registerSwitchedOffEnvironment = Effect.gen(function* () {
-  const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+const registerSwitchedOffMachine = Effect.gen(function* () {
+  const registry = yield* MachineRegistry.MachineRegistry;
   const registration = new BearerConnectionRegistration({
     target: new BearerConnectionTarget({
       machineId: PAIRED_MACHINE_ID,
@@ -271,9 +271,9 @@ describe("connection onboarding", () => {
 
   it.effect("turns a switched-off machine back on when it is paired again", () =>
     Effect.gen(function* () {
-      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const registry = yield* MachineRegistry.MachineRegistry;
       const onboarding = yield* Onboarding.ConnectionOnboarding;
-      yield* registerSwitchedOffEnvironment;
+      yield* registerSwitchedOffMachine;
 
       const machineId = yield* onboarding.registerPairing(PAIRING_INPUT);
 
@@ -298,9 +298,9 @@ describe("connection onboarding", () => {
     "re-pairs an outdated self-updatable machine so its connection can be rechecked",
     () =>
       Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const onboarding = yield* Onboarding.ConnectionOnboarding;
-        yield* registerSwitchedOffEnvironment;
+        yield* registerSwitchedOffMachine;
         yield* registry.setCompatibility(
           PAIRED_MACHINE_ID,
           new ConnectionBlockedError({
@@ -336,7 +336,7 @@ describe("connection onboarding", () => {
 
   it.effect("leaves a platform-managed machine untouched when its id is paired", () =>
     Effect.gen(function* () {
-      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const registry = yield* MachineRegistry.MachineRegistry;
       const onboarding = yield* Onboarding.ConnectionOnboarding;
       yield* registry.registerPlatform(
         new PrimaryConnectionRegistration({
@@ -366,9 +366,9 @@ describe("connection onboarding", () => {
 
   it.effect("leaves a switched-off machine unchanged when the pairing exchange fails", () =>
     Effect.gen(function* () {
-      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const registry = yield* MachineRegistry.MachineRegistry;
       const onboarding = yield* Onboarding.ConnectionOnboarding;
-      const before = yield* registerSwitchedOffEnvironment;
+      const before = yield* registerSwitchedOffMachine;
 
       const error = yield* onboarding.registerPairing(PAIRING_INPUT).pipe(Effect.flip);
 

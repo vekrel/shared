@@ -16,16 +16,16 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom, AtomRegistry } from "effect/reactivity";
 
 import {
-  createEnvironmentRpcCommand,
-  createEnvironmentRpcSubscriptionAtomFamily,
-  createEnvironmentSubscriptionAtomFamily,
+  createMachineRpcCommand,
+  createMachineRpcSubscriptionAtomFamily,
+  createMachineSubscriptionAtomFamily,
 } from "./runtime.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
 import * as Persistence from "../platform/persistence.ts";
-import { request, subscribe, type EnvironmentRpcInput } from "../rpc/client.ts";
-import { followStreamInEnvironment } from "./runtime.ts";
+import { request, subscribe, type MachineRpcInput } from "../rpc/client.ts";
+import { followStreamInMachine } from "./runtime.ts";
 import { vcsCommandConcurrency, vcsCommandScheduler } from "./vcsCommandScheduler.ts";
 import {
   invalidateCachedVcsRefs,
@@ -54,7 +54,7 @@ function canUseVcsRefsCache(input: VcsListRefsInput): boolean {
 
 export const commitVcsRefsRefresh = Effect.fn("CachedVcsRefsState.commitRefresh")(function* (
   registry: AtomRegistry.AtomRegistry,
-  cache: Persistence.EnvironmentCacheStore["Service"],
+  cache: Persistence.MachineCacheStore["Service"],
   input: {
     readonly machineId: MachineId;
     readonly cwd: string;
@@ -123,8 +123,8 @@ export const makeCachedVcsRefsChanges = Effect.fn("CachedVcsRefsState.makeChange
   registry?: AtomRegistry.AtomRegistry,
   persistedCacheReadable = true,
 ) {
-  const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
-  const cache = yield* Persistence.EnvironmentCacheStore;
+  const supervisor = yield* MachineSupervisor.MachineSupervisor;
+  const cache = yield* Persistence.MachineCacheStore;
   const machineId = supervisor.target.machineId;
   const useCache = canUseVcsRefsCache(input);
   const cached =
@@ -144,7 +144,7 @@ export const makeCachedVcsRefsChanges = Effect.fn("CachedVcsRefsState.makeChange
       : Option.none<VcsListRefsResult>();
   const refresh = Effect.fn("CachedVcsRefsState.refresh")(function* () {
     const refs = yield* request(WS_METHODS.vcsListRefs, input).pipe(
-      Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+      Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
     );
     const persist = cache.saveVcsRefs(machineId, input.cwd, refs).pipe(
       Effect.catch((error) =>
@@ -188,7 +188,7 @@ export const makeCachedVcsRefsChanges = Effect.fn("CachedVcsRefsState.makeChange
         : Stream.fromEffect(
             refresh().pipe(
               // Session removal can precede switchMap cancelling this refresh.
-              Effect.catchTags({ EnvironmentRpcUnavailableError: () => Effect.never }),
+              Effect.catchTags({ MachineRpcUnavailableError: () => Effect.never }),
               Effect.tapError((error) =>
                 Effect.logWarning("Could not refresh Git refs.").pipe(
                   Effect.annotateLogs({
@@ -220,7 +220,7 @@ function cachedVcsRefsChanges(
   expectedRevision: number,
   persistedCacheReadable: boolean,
 ) {
-  return followStreamInEnvironment(
+  return followStreamInMachine(
     machineId,
     Stream.unwrap(
       Effect.gen(function* () {
@@ -236,8 +236,8 @@ function cachedVcsRefsChanges(
   );
 }
 
-export function createVcsEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | Persistence.EnvironmentCacheStore | R, E>,
+export function createVcsMachineAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry | Persistence.MachineCacheStore | R, E>,
 ) {
   /**
    * One flat family on purpose: families hold entries via WeakRef, so a nested
@@ -278,14 +278,14 @@ export function createVcsEnvironmentAtoms<R, E>(
     listRefs,
     // An uncached read for decisions that must match the repository now, not
     // the persisted list a picker renders from.
-    readRefs: createEnvironmentRpcCommand(runtime, {
+    readRefs: createMachineRpcCommand(runtime, {
       label: "machine-data:vcs:read-refs",
       tag: WS_METHODS.vcsListRefs,
     }),
-    status: createEnvironmentSubscriptionAtomFamily(runtime, {
+    status: createMachineSubscriptionAtomFamily(runtime, {
       label: "machine-data:vcs:status",
       idleTtlMs: VCS_STATUS_IDLE_TTL_MS,
-      subscribe: (input: EnvironmentRpcInput<typeof WS_METHODS.subscribeVcsStatus>) =>
+      subscribe: (input: MachineRpcInput<typeof WS_METHODS.subscribeVcsStatus>) =>
         subscribe(WS_METHODS.subscribeVcsStatus, input).pipe(
           Stream.mapAccum(
             () => null as VcsStatusResult | null,
@@ -296,58 +296,58 @@ export function createVcsEnvironmentAtoms<R, E>(
           ),
         ),
     }),
-    pull: createEnvironmentRpcCommand(runtime, {
+    pull: createMachineRpcCommand(runtime, {
       label: "machine-data:vcs:pull",
       tag: WS_METHODS.vcsPull,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
-    refreshStatus: createEnvironmentRpcCommand(runtime, {
+    refreshStatus: createMachineRpcCommand(runtime, {
       label: "machine-data:vcs:refresh-status",
       tag: WS_METHODS.vcsRefreshStatus,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
-    createWorktree: createEnvironmentRpcCommand(runtime, {
+    createWorktree: createMachineRpcCommand(runtime, {
       label: "machine-data:vcs:create-worktree",
       tag: WS_METHODS.vcsCreateWorktree,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
-    worktreeSetup: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    worktreeSetup: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:vcs:worktree-setup",
       tag: WS_METHODS.subscribeWorktreeSetup,
       idleTtlMs: VCS_STATUS_IDLE_TTL_MS,
     }),
-    cancelWorktreeSetup: createEnvironmentRpcCommand(runtime, {
+    cancelWorktreeSetup: createMachineRpcCommand(runtime, {
       label: "machine-data:vcs:cancel-worktree-setup",
       tag: WS_METHODS.worktreeSetupCancel,
     }),
-    removeWorktree: createEnvironmentRpcCommand(runtime, {
+    removeWorktree: createMachineRpcCommand(runtime, {
       label: "machine-data:vcs:remove-worktree",
       tag: WS_METHODS.vcsRemoveWorktree,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
-    createRef: createEnvironmentRpcCommand(runtime, {
+    createRef: createMachineRpcCommand(runtime, {
       label: "machine-data:vcs:create-ref",
       tag: WS_METHODS.vcsCreateRef,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
-    switchRef: createEnvironmentRpcCommand(runtime, {
+    switchRef: createMachineRpcCommand(runtime, {
       label: "machine-data:vcs:switch-ref",
       tag: WS_METHODS.vcsSwitchRef,
       scheduler: vcsCommandScheduler,
       concurrency: vcsCommandConcurrency,
       onSettled: invalidateRefs,
     }),
-    init: createEnvironmentRpcCommand(runtime, {
+    init: createMachineRpcCommand(runtime, {
       label: "machine-data:vcs:init",
       tag: WS_METHODS.vcsInit,
       scheduler: vcsCommandScheduler,

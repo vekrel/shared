@@ -55,14 +55,14 @@ import {
 } from "./model.ts";
 import * as Persistence from "../platform/persistence.ts";
 import * as ConnectionProfileStore from "./profileStore.ts";
-import * as EnvironmentRegistry from "./registry.ts";
+import * as MachineRegistry from "./registry.ts";
 import {
   GitHubRoutingPermissions,
   type StoredGitHubRoutingPermission,
   makeGitHubRoutingPermissions,
 } from "./githubRoutingPermissions.ts";
 import * as RpcSession from "../rpc/session.ts";
-import * as EnvironmentSupervisor from "./supervisor.ts";
+import * as MachineSupervisor from "./supervisor.ts";
 import * as ConnectionWakeups from "./wakeups.ts";
 import { watchDiscoveredCompatibility } from "./layer.ts";
 import * as RelayMachineDiscovery from "../relay/discovery.ts";
@@ -144,7 +144,7 @@ interface SessionControl {
   readonly closed: Deferred.Deferred<never, ConnectionTransientError>;
 }
 
-const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
+const makeHarness = Effect.fn("TestMachineRegistry.makeHarness")(function* (
   initialTargets: ReadonlyArray<ConnectionTarget>,
   initialProfiles: ReadonlyArray<ConnectionProfile> = [],
   initialCredentials: ReadonlyArray<readonly [string, ConnectionCredential]> = [],
@@ -272,7 +272,7 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
         return next;
       }),
   });
-  const cacheStore = Persistence.EnvironmentCacheStore.of({
+  const cacheStore = Persistence.MachineCacheStore.of({
     loadShell: (machineId) =>
       Ref.get(shellCache).pipe(
         Effect.map((cache) => Option.fromUndefinedOr(cache.get(machineId))),
@@ -283,9 +283,9 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
         next.set(machineId, snapshot);
         return next;
       }),
-    loadThread: (_environmentId, _threadId) => Effect.succeedNone,
-    saveThread: (_environmentId, _thread) => Effect.void,
-    removeThread: (_environmentId, _threadId) => Effect.void,
+    loadThread: (_machineId, _threadId) => Effect.succeedNone,
+    saveThread: (_machineId, _thread) => Effect.void,
+    removeThread: (_machineId, _threadId) => Effect.void,
     loadServerConfig: () => Effect.succeedNone,
     saveServerConfig: () => Effect.void,
     loadVcsRefs: () => Effect.succeedNone,
@@ -303,7 +303,7 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
         ),
       ),
   });
-  const ownedDataCleanup = Persistence.EnvironmentOwnedDataCleanup.of({
+  const ownedDataCleanup = Persistence.MachineOwnedDataCleanup.of({
     clear: (machineId) =>
       Ref.update(ownedDataClears, (machineIds) => [...machineIds, machineId]),
   });
@@ -434,8 +434,8 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
       checkRoute(route).pipe(Effect.map((check) => check === "answered")),
   });
 
-  const layerCache = Layer.succeed(Persistence.EnvironmentCacheStore, cacheStore);
-  const layer = EnvironmentRegistry.layer.pipe(
+  const layerCache = Layer.succeed(Persistence.MachineCacheStore, cacheStore);
+  const layer = MachineRegistry.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(Persistence.ConnectionTargetStore, targetStore),
@@ -451,7 +451,7 @@ const makeHarness = Effect.fn("TestEnvironmentRegistry.makeHarness")(function* (
         ),
         Layer.succeed(ConnectionDriver.ConnectionDriver, driver),
         layerCache,
-        Layer.succeed(Persistence.EnvironmentOwnedDataCleanup, ownedDataCleanup),
+        Layer.succeed(Persistence.MachineOwnedDataCleanup, ownedDataCleanup),
       ),
     ),
   );
@@ -499,7 +499,7 @@ function replaceRoutes(
 }
 
 function awaitConnectionState(
-  registry: EnvironmentRegistry.EnvironmentRegistry["Service"],
+  registry: MachineRegistry.MachineRegistry["Service"],
   machineId: MachineId,
   predicate: (state: SupervisorConnectionState) => boolean,
 ) {
@@ -514,13 +514,13 @@ function awaitConnectionState(
   });
 }
 
-describe("EnvironmentRegistry", () => {
+describe("MachineRegistry", () => {
   it.effect("replays connected state when arming a desktop commit observer", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness([TARGET]);
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* awaitConnectionState(
           registry,
@@ -547,7 +547,7 @@ describe("EnvironmentRegistry", () => {
       const harness = yield* makeHarness([TARGET]);
       const registryScope = yield* Scope.make();
       const context = yield* Layer.build(harness.layer).pipe(Scope.provide(registryScope));
-      const registry = Context.get(context, EnvironmentRegistry.EnvironmentRegistry);
+      const registry = Context.get(context, MachineRegistry.MachineRegistry);
       const dispatcher = new Scheduler.MixedScheduler("sync", () => () => {}).makeDispatcher();
       const scheduler: Scheduler.Scheduler = {
         executionMode: "sync",
@@ -580,7 +580,7 @@ describe("EnvironmentRegistry", () => {
       });
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const start = yield* Effect.forkChild(registry.start);
 
         yield* Deferred.await(bothLoadsStarted).pipe(Effect.timeout("1 second"));
@@ -604,7 +604,7 @@ describe("EnvironmentRegistry", () => {
       });
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         expect((yield* registry.state(TARGET.machineId)).phase).toBe("connecting");
 
         yield* Deferred.await(connectionStarted);
@@ -618,7 +618,7 @@ describe("EnvironmentRegistry", () => {
     Effect.gen(function* () {
       const harness = yield* makeHarness([TARGET]);
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* awaitConnectionState(
           registry,
@@ -715,27 +715,27 @@ describe("EnvironmentRegistry", () => {
       const unrelated = yield* Deferred.make<void>();
       const replayed = yield* Deferred.make<void>();
       const refreshed = yield* Deferred.make<void>();
-      let firstEnvironmentCalls = 0;
-      let secondEnvironmentCalls = 0;
+      let firstMachineCalls = 0;
+      let secondMachineCalls = 0;
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* watchDiscoveredCompatibility().pipe(
-          Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, {
+          Effect.provideService(MachineRegistry.MachineRegistry, {
             ...registry,
             setCompatibility: (machineId, error) =>
               registry.setCompatibility(machineId, error).pipe(
                 Effect.andThen(
                   Effect.gen(function* () {
                     if (machineId === RELAY_TARGET.machineId) {
-                      firstEnvironmentCalls += 1;
+                      firstMachineCalls += 1;
                       yield* Deferred.succeed(
-                        firstEnvironmentCalls === 1 ? initial : refreshed,
+                        firstMachineCalls === 1 ? initial : refreshed,
                         undefined,
                       );
                     } else {
-                      secondEnvironmentCalls += 1;
+                      secondMachineCalls += 1;
                       yield* Deferred.succeed(
-                        secondEnvironmentCalls === 1 ? unrelated : replayed,
+                        secondMachineCalls === 1 ? unrelated : replayed,
                         undefined,
                       );
                     }
@@ -845,7 +845,7 @@ describe("EnvironmentRegistry", () => {
         };
       };
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* awaitConnectionState(
           registry,
@@ -854,7 +854,7 @@ describe("EnvironmentRegistry", () => {
         );
         const relayChecked = yield* Deferred.make<void>();
         yield* watchDiscoveredCompatibility().pipe(
-          Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, {
+          Effect.provideService(MachineRegistry.MachineRegistry, {
             ...registry,
             setCompatibility: (machineId, error) =>
               registry
@@ -914,7 +914,7 @@ describe("EnvironmentRegistry", () => {
           { initialDisabled: [machineId] },
         );
         yield* Effect.gen(function* () {
-          const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+          const registry = yield* MachineRegistry.MachineRegistry;
           yield* registry.start;
           const error = new ConnectionBlockedError({
             reason: "unsupported",
@@ -955,7 +955,7 @@ describe("EnvironmentRegistry", () => {
         beforePrepareRoute: () => Ref.get(rejection),
       });
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* SubscriptionRef.changes(registry.entries).pipe(
           Stream.filter(
@@ -993,7 +993,7 @@ describe("EnvironmentRegistry", () => {
       }).pipe(Effect.provide(harness.layer), Effect.scoped);
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const entry = (yield* SubscriptionRef.get(registry.entries)).get(
           RELAY_TARGET.machineId,
         );
@@ -1042,7 +1042,7 @@ describe("EnvironmentRegistry", () => {
         },
       );
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         const awaitUnsupported = SubscriptionRef.changes(registry.entries).pipe(
           Stream.filter((entries) => entries.get(machineId)?.unsupportedReason !== undefined),
@@ -1095,7 +1095,7 @@ describe("EnvironmentRegistry", () => {
       const harness = yield* makeHarness([RELAY_TARGET]);
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* awaitConnectionState(
           registry,
@@ -1140,7 +1140,7 @@ describe("EnvironmentRegistry", () => {
       });
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* registry.register(
           new RelayConnectionRegistration({
@@ -1164,7 +1164,7 @@ describe("EnvironmentRegistry", () => {
       const harness = yield* makeHarness([SSH_CONNECTION], [SSH_PROFILE]);
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* awaitConnectionState(
           registry,
@@ -1196,7 +1196,7 @@ describe("EnvironmentRegistry", () => {
       const harness = yield* makeHarness([RELAY_TARGET]);
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const firstObserved = yield* Deferred.make<void>();
         const secondObserved = yield* Deferred.make<void>();
         const labels = yield* Ref.make<ReadonlyArray<string>>([]);
@@ -1212,7 +1212,7 @@ describe("EnvironmentRegistry", () => {
             .followStream(
               RELAY_TARGET.machineId,
               Stream.unwrap(
-                EnvironmentSupervisor.EnvironmentSupervisor.pipe(
+                MachineSupervisor.MachineSupervisor.pipe(
                   Effect.map((supervisor) =>
                     Stream.concat(Stream.succeed(supervisor.target.label), Stream.never),
                   ),
@@ -1253,7 +1253,7 @@ describe("EnvironmentRegistry", () => {
       );
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const initialObserved = yield* Deferred.make<void>();
         const replacementObserved = yield* Deferred.make<void>();
         const tokens = yield* Ref.make<ReadonlyArray<string>>([]);
@@ -1266,7 +1266,7 @@ describe("EnvironmentRegistry", () => {
               BEARER_TARGET.machineId,
               Stream.unwrap(
                 Effect.gen(function* () {
-                  const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+                  const supervisor = yield* MachineSupervisor.MachineSupervisor;
                   yield* Ref.update(followedSupervisors, (count) => count + 1);
                   return SubscriptionRef.changes(supervisor.prepared);
                 }),
@@ -1326,7 +1326,7 @@ describe("EnvironmentRegistry", () => {
       );
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.removeRelayMachines();
 
         const targets = yield* Ref.get(harness.storedTargets);
@@ -1359,7 +1359,7 @@ describe("EnvironmentRegistry", () => {
       });
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* awaitConnectionState(
           registry,
@@ -1401,7 +1401,7 @@ describe("EnvironmentRegistry", () => {
       storedCredentials = harness.storedCredentials;
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const registration = (token: string) =>
           new BearerConnectionRegistration({
             target: BEARER_TARGET,
@@ -1431,7 +1431,7 @@ describe("EnvironmentRegistry", () => {
       const harness = yield* makeHarness([]);
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const registration = (token: string) =>
           new BearerConnectionRegistration({
             target: BEARER_TARGET,
@@ -1440,7 +1440,7 @@ describe("EnvironmentRegistry", () => {
           });
         const preparedToken = registry.run(
           BEARER_TARGET.machineId,
-          EnvironmentSupervisor.EnvironmentSupervisor.pipe(
+          MachineSupervisor.MachineSupervisor.pipe(
             Effect.flatMap((supervisor) => SubscriptionRef.get(supervisor.prepared)),
             Effect.map((prepared) =>
               Option.isSome(prepared) && prepared.value.httpAuthorization?._tag === "Bearer"
@@ -1492,7 +1492,7 @@ describe("EnvironmentRegistry", () => {
       });
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const registration = (token: string) =>
           new BearerConnectionRegistration({
             target: BEARER_TARGET,
@@ -1524,7 +1524,7 @@ describe("EnvironmentRegistry", () => {
       const harness = yield* makeHarness([]);
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.registerPlatform(new PrimaryConnectionRegistration({ target: TARGET }));
         yield* awaitConnectionState(
           registry,
@@ -1538,7 +1538,7 @@ describe("EnvironmentRegistry", () => {
         ).toEqual(TARGET);
 
         const error = yield* Effect.flip(registry.remove(TARGET.machineId));
-        expect(error._tag).toBe("PlatformEnvironmentRemovalError");
+        expect(error._tag).toBe("PlatformMachineRemovalError");
         expect(
           (yield* SubscriptionRef.get(registry.entries)).get(TARGET.machineId)?.target,
         ).toEqual(TARGET);
@@ -1561,7 +1561,7 @@ describe("EnvironmentRegistry", () => {
       yield* permissions.set(shadowedEntry, "read-write");
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.registerPlatform(new PrimaryConnectionRegistration({ target: TARGET }));
         expect(yield* permissions.get(shadowedEntry)).toBe("off");
 
@@ -1600,7 +1600,7 @@ describe("EnvironmentRegistry", () => {
       });
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const persistedRegistration = yield* registry
           .register(new RelayConnectionRegistration({ target: shadowedTarget }))
           .pipe(Effect.forkChild({ startImmediately: true }));
@@ -1619,7 +1619,7 @@ describe("EnvironmentRegistry", () => {
         yield* Fiber.join(platformRegistration);
         const error = yield* Fiber.join(removal);
 
-        expect(error._tag).toBe("PlatformEnvironmentRemovalError");
+        expect(error._tag).toBe("PlatformMachineRemovalError");
         expect(
           (yield* SubscriptionRef.get(registry.entries)).get(TARGET.machineId)?.target,
         ).toEqual(TARGET);
@@ -1639,7 +1639,7 @@ describe("EnvironmentRegistry", () => {
       });
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* awaitConnectionState(
           registry,
@@ -1659,7 +1659,7 @@ describe("EnvironmentRegistry", () => {
         yield* Deferred.succeed(continueRemoval, undefined);
         yield* Fiber.join(removal);
         const error = yield* Fiber.join(stateLookup);
-        expect(error._tag).toBe("EnvironmentNotRegisteredError");
+        expect(error._tag).toBe("MachineNotRegisteredError");
       }).pipe(Effect.provide(harness.layer), Effect.scoped);
     }),
   );
@@ -1668,7 +1668,7 @@ describe("EnvironmentRegistry", () => {
     Effect.gen(function* () {
       const harness = yield* makeHarness([]);
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const registration = new PrimaryConnectionRegistration({ target: TARGET });
         yield* registry.registerPlatform(registration);
         yield* awaitConnectionState(
@@ -1727,7 +1727,7 @@ describe("EnvironmentRegistry", () => {
       const harness = yield* makeHarness([]);
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const registration = new PrimaryConnectionRegistration({ target: TARGET });
         yield* Effect.all(
           Array.from({ length: 5 }, () => registry.registerPlatform(registration)),
@@ -1780,7 +1780,7 @@ describe("EnvironmentRegistry", () => {
       const entry = { target: TARGET, profile: Option.none(), enabled: true };
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const registration = new PrimaryConnectionRegistration({ target: TARGET });
         yield* registry.registerPlatform(registration);
         yield* awaitConnectionState(
@@ -1842,7 +1842,7 @@ describe("EnvironmentRegistry", () => {
       );
 
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* registry.remove(SSH_CONNECTION.machineId);
 
@@ -1861,7 +1861,7 @@ describe("EnvironmentRegistry", () => {
   );
 });
 
-describe("EnvironmentRegistry routes", () => {
+describe("MachineRegistry routes", () => {
   const LAN_TARGET = new BearerConnectionTarget({
     machineId: RELAY_TARGET.machineId,
     label: RELAY_TARGET.label,
@@ -1881,7 +1881,7 @@ describe("EnvironmentRegistry routes", () => {
     Effect.gen(function* () {
       const harness = yield* makeHarness([RELAY_TARGET]);
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.register(lanRegistration());
 
         expect(routesOf(yield* Ref.get(harness.storedTargets), LAN_TARGET.machineId)).toEqual([
@@ -1903,7 +1903,7 @@ describe("EnvironmentRegistry routes", () => {
         [[LAN_TARGET.connectionId, BEARER_CREDENTIAL]],
       );
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const repaired = new BearerConnectionTarget({
           ...LAN_TARGET,
           connectionId: "bearer:lan-again",
@@ -1929,7 +1929,7 @@ describe("EnvironmentRegistry routes", () => {
       Effect.gen(function* () {
         const harness = yield* makeHarness([SSH_CONNECTION], [SSH_PROFILE]);
         yield* Effect.gen(function* () {
-          const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+          const registry = yield* MachineRegistry.MachineRegistry;
           const again = new SshConnectionTarget({
             ...SSH_CONNECTION,
             connectionId: "ssh-connection-new-id",
@@ -1960,7 +1960,7 @@ describe("EnvironmentRegistry routes", () => {
         [[LAN_TARGET.connectionId, BEARER_CREDENTIAL]],
       );
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.removeRelayMachines();
 
         const targets = yield* Ref.get(harness.storedTargets);
@@ -1982,7 +1982,7 @@ describe("EnvironmentRegistry routes", () => {
         [[LAN_TARGET.connectionId, BEARER_CREDENTIAL]],
       );
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.reorderRoutes(LAN_TARGET.machineId, ["relay", LAN_TARGET.connectionId]);
         expect(routesOf(yield* Ref.get(harness.storedTargets), LAN_TARGET.machineId)).toEqual([
           RELAY_TARGET,
@@ -2005,7 +2005,7 @@ describe("EnvironmentRegistry routes", () => {
         [[LAN_TARGET.connectionId, BEARER_CREDENTIAL]],
       );
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.removeRoute(LAN_TARGET.machineId, LAN_TARGET.connectionId);
         expect(routesOf(yield* Ref.get(harness.storedTargets), LAN_TARGET.machineId)).toEqual([
           RELAY_TARGET,
@@ -2030,7 +2030,7 @@ describe("EnvironmentRegistry routes", () => {
         write: (next) => Effect.sync(() => void (stored = next)),
       });
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const current = () =>
           SubscriptionRef.get(registry.entries).pipe(
             Effect.map((entries) => entries.get(RELAY_TARGET.machineId)!),
@@ -2061,7 +2061,7 @@ describe("EnvironmentRegistry routes", () => {
         ],
       );
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const entries = yield* SubscriptionRef.get(registry.entries);
         expect([...entries.keys()]).toEqual([
           LAN_TARGET.machineId,
@@ -2099,7 +2099,7 @@ describe("EnvironmentRegistry routes", () => {
         },
       );
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         yield* registry.start;
         yield* SubscriptionRef.changes(registry.entries).pipe(
           Stream.map((entries) => entries.get(LAN_TARGET.machineId)?.alternateRoutes?.[0]),
@@ -2125,7 +2125,7 @@ describe("EnvironmentRegistry routes", () => {
         [[LAN_TARGET.connectionId, BEARER_CREDENTIAL]],
       );
       yield* Effect.gen(function* () {
-        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const registry = yield* MachineRegistry.MachineRegistry;
         const entry = (yield* SubscriptionRef.get(registry.entries)).get(LAN_TARGET.machineId);
         expect(entry?.target).toEqual(LAN_TARGET);
         expect(entry?.alternateRoutes ?? []).toEqual([]);

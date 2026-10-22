@@ -14,8 +14,8 @@ import {
   type SupervisorConnectionState,
 } from "./model.ts";
 import {
-  environmentMcpUrl,
-  presentEnvironmentConnection,
+  machineMcpUrl,
+  presentMachineConnection,
   presentConnectionState,
 } from "./presentation.ts";
 
@@ -80,10 +80,10 @@ describe("connection presentation", () => {
       alternateRoutes: [tailnet, serve],
     };
 
-    expect(environmentMcpUrl({ entry, connectedTarget: tailnet.target })).toBe(
+    expect(machineMcpUrl({ entry, connectedTarget: tailnet.target })).toBe(
       "http://100.115.1.44:3773/mcp",
     );
-    expect(environmentMcpUrl({ entry })).toBe("http://192.168.4.53:3773/mcp");
+    expect(machineMcpUrl({ entry })).toBe("http://192.168.4.53:3773/mcp");
   });
 
   // regression: #16909 Copy MCP URL falls back to an alternate route when the relay route has no address
@@ -99,11 +99,11 @@ describe("connection presentation", () => {
       alternateRoutes: [{ target: ENTRY.target, profile: ENTRY.profile }],
     };
 
-    expect(environmentMcpUrl({ entry, connectedTarget: relay })).toBe(
+    expect(machineMcpUrl({ entry, connectedTarget: relay })).toBe(
       "https://machine.example.test/mcp",
     );
     expect(
-      environmentMcpUrl({
+      machineMcpUrl({
         entry,
         connectedTarget: relay,
         relayHttpBaseUrl: "https://tunnel.example.test",
@@ -156,7 +156,7 @@ describe("connection presentation", () => {
 
   it("preserves an explicitly available machine while offline", () => {
     expect(
-      presentEnvironmentConnection(
+      presentMachineConnection(
         supervisorState({
           desired: false,
           network: "offline",

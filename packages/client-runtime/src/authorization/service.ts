@@ -12,9 +12,9 @@ import {
   resolveRemoteWebSocketConnectionUrl,
 } from "./remote.ts";
 import {
-  environmentMismatchError,
+  machineMismatchError,
   mapManagedRelayError,
-  mapRemoteDpopEnvironmentError,
+  mapRemoteDpopMachineError,
   mapRemoteMachineError,
 } from "../connection/errors.ts";
 import {
@@ -23,7 +23,7 @@ import {
   type ConnectionAttemptError,
 } from "../connection/model.ts";
 import { fetchRemoteMachineDescriptor } from "../machine/descriptor.ts";
-import { environmentEndpointUrl } from "../machine/endpoint.ts";
+import { machineEndpointUrl } from "../machine/endpoint.ts";
 import * as ClientCapabilities from "../platform/capabilities.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import * as TokenStore from "./tokenStore.ts";
@@ -52,7 +52,7 @@ export interface AuthorizedRemoteMachine {
   readonly httpAuthorization: PreparedHttpAuthorization;
 }
 
-export interface AuthorizedRemoteHttpEnvironment {
+export interface AuthorizedRemoteHttpMachine {
   readonly machineId: MachineId;
   readonly label: string;
   readonly httpBaseUrl: string;
@@ -81,7 +81,7 @@ export class RemoteMachineAuthorization extends Context.Service<
     readonly authorizeDpopHttp: (input: {
       readonly expectedMachineId: MachineId;
       readonly rejectedAccessToken?: string;
-    }) => Effect.Effect<AuthorizedRemoteHttpEnvironment, ConnectionAttemptError>;
+    }) => Effect.Effect<AuthorizedRemoteHttpMachine, ConnectionAttemptError>;
   }
 >()("@vekrel/client-runtime/authorization/service/RemoteMachineAuthorization") {}
 
@@ -92,7 +92,7 @@ const DPOP_AUTHORIZATION_TIMEOUT_MS = 30_000;
 function mapDpopSocketError(error: RemoteMachineAuthError | ConnectionAttemptError) {
   return error._tag === "ConnectionTransientError" || error._tag === "ConnectionBlockedError"
     ? error
-    : mapRemoteDpopEnvironmentError(error);
+    : mapRemoteDpopMachineError(error);
 }
 
 const fetchDescriptor = Effect.fn("clientRuntime.connection.remote.fetchDescriptor")(function* (
@@ -158,7 +158,7 @@ export const make = Effect.gen(function* () {
             Effect.provideService(HttpClient.HttpClient, httpClient),
           );
       if (descriptor.machineId !== input.expectedMachineId) {
-        return yield* environmentMismatchError({
+        return yield* machineMismatchError({
           expected: input.expectedMachineId,
           actual: descriptor.machineId,
         });
@@ -221,7 +221,7 @@ export const make = Effect.gen(function* () {
       const ticketProof = yield* signer
         .createProof({
           method: "POST",
-          url: environmentEndpointUrl(endpoint.httpBaseUrl, "/api/auth/websocket-ticket"),
+          url: machineEndpointUrl(endpoint.httpBaseUrl, "/api/auth/websocket-ticket"),
           accessToken: token.accessToken,
         })
         .pipe(
@@ -302,7 +302,7 @@ export const make = Effect.gen(function* () {
       })
       .pipe(Effect.mapError(mapManagedRelayError));
     if (connected.machineId !== machineId) {
-      return yield* environmentMismatchError({
+      return yield* machineMismatchError({
         expected: machineId,
         actual: connected.machineId,
       });
@@ -323,7 +323,7 @@ export const make = Effect.gen(function* () {
         Effect.withSpan("machine.authorization.descriptor"),
       );
       if (descriptor.machineId !== machineId) {
-        return yield* environmentMismatchError({
+        return yield* machineMismatchError({
           expected: machineId,
           actual: descriptor.machineId,
         });
@@ -331,7 +331,7 @@ export const make = Effect.gen(function* () {
       const bootstrapProof = yield* signer
         .createProof({
           method: "POST",
-          url: environmentEndpointUrl(bootstrap.endpoint.httpBaseUrl, "/oauth/token"),
+          url: machineEndpointUrl(bootstrap.endpoint.httpBaseUrl, "/oauth/token"),
         })
         .pipe(
           Effect.mapError(
@@ -349,7 +349,7 @@ export const make = Effect.gen(function* () {
         dpopProof: bootstrapProof,
         clientMetadata: presentation.metadata,
       }).pipe(
-        Effect.mapError(mapRemoteDpopEnvironmentError),
+        Effect.mapError(mapRemoteDpopMachineError),
         Effect.provideService(HttpClient.HttpClient, httpClient),
         Effect.withSpan("machine.authorization.accessToken.exchange"),
       );
@@ -482,7 +482,7 @@ export const make = Effect.gen(function* () {
   const httpAuthorization = (
     token: TokenStore.RemoteDpopAccessToken,
     httpBaseUrl = token.endpoint.httpBaseUrl,
-  ): AuthorizedRemoteHttpEnvironment => ({
+  ): AuthorizedRemoteHttpMachine => ({
     machineId: token.machineId,
     label: token.label,
     httpBaseUrl,

@@ -9,36 +9,36 @@ import { Atom } from "effect/reactivity";
 import { applyCommandOutputFrame, EMPTY_COMMAND_OUTPUT } from "./commandOutput.ts";
 
 import {
-  createEnvironmentRpcCommand,
-  createEnvironmentRpcQueryAtomFamily,
-  createEnvironmentRpcSubscriptionAtomFamily,
-  createEnvironmentCommand,
+  createMachineRpcCommand,
+  createMachineRpcQueryAtomFamily,
+  createMachineRpcSubscriptionAtomFamily,
+  createMachineCommand,
 } from "./runtime.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import * as RemoteMachineAuthorization from "../authorization/service.ts";
 import * as ManagedRelayDpopSigner from "../relay/managedRelay.ts";
-import { EnvironmentRpcUnavailableError } from "../rpc/client.ts";
-import { fetchEnvironmentThreadTranscript } from "./threadTranscriptHttp.ts";
+import { MachineRpcUnavailableError } from "../rpc/client.ts";
+import { fetchMachineThreadTranscript } from "./threadTranscriptHttp.ts";
 
-export function createOrchestrationEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | HttpClient.HttpClient | R, E>,
+export function createOrchestrationMachineAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry | HttpClient.HttpClient | R, E>,
 ) {
   return {
-    threadTranscript: createEnvironmentCommand(runtime, {
+    threadTranscript: createMachineCommand(runtime, {
       label: "machine-data:orchestration:thread-transcript",
       execute: Effect.fn("orchestration.execute")(function* (input: {
         readonly threadId: ThreadId;
       }) {
-        const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+        const supervisor = yield* MachineSupervisor.MachineSupervisor;
         const prepared = yield* SubscriptionRef.get(supervisor.prepared);
         if (Option.isNone(prepared)) {
-          return yield* new EnvironmentRpcUnavailableError({
+          return yield* new MachineRpcUnavailableError({
             machineId: supervisor.target.machineId,
             message: "The source machine is not connected.",
           });
         }
-        return yield* fetchEnvironmentThreadTranscript({
+        return yield* fetchMachineThreadTranscript({
           prepared: prepared.value,
           threadId: input.threadId,
           signer: yield* Effect.serviceOption(ManagedRelayDpopSigner.ManagedRelayDpopSigner),
@@ -49,28 +49,28 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
       }),
     }),
     v2: {
-      dispatchCommand: createEnvironmentRpcCommand(runtime, {
+      dispatchCommand: createMachineRpcCommand(runtime, {
         label: "machine-data:orchestration-v2:dispatch-command",
         tag: ORCHESTRATION_V2_WS_METHODS.dispatchCommand,
       }),
-      threadProjection: createEnvironmentRpcQueryAtomFamily(runtime, {
+      threadProjection: createMachineRpcQueryAtomFamily(runtime, {
         label: "machine-data:orchestration-v2:thread-projection",
         tag: ORCHESTRATION_V2_WS_METHODS.getThreadProjection,
         staleTimeMs: 0,
         idleTtlMs: 0,
       }),
-      shell: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      shell: createMachineRpcSubscriptionAtomFamily(runtime, {
         label: "machine-data:orchestration-v2:shell",
         tag: ORCHESTRATION_V2_WS_METHODS.subscribeShell,
       }),
-      thread: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      thread: createMachineRpcSubscriptionAtomFamily(runtime, {
         label: "machine-data:orchestration-v2:thread",
         tag: ORCHESTRATION_V2_WS_METHODS.subscribeThread,
         idleTtlMs: 0,
       }),
       // One expanded command row's output. Mounted only while the row is open,
       // and released as soon as it closes, so hidden rows receive nothing.
-      commandOutput: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      commandOutput: createMachineRpcSubscriptionAtomFamily(runtime, {
         label: "machine-data:orchestration-v2:command-output",
         tag: ORCHESTRATION_V2_WS_METHODS.subscribeCommandOutput,
         idleTtlMs: 0,
@@ -82,49 +82,49 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
           ),
       }),
     },
-    turnDiff: createEnvironmentRpcQueryAtomFamily(runtime, {
+    turnDiff: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:orchestration:turn-diff",
       tag: ORCHESTRATION_V2_WS_METHODS.getTurnDiff,
     }),
-    workflowScript: createEnvironmentRpcQueryAtomFamily(runtime, {
+    workflowScript: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:orchestration:workflow-script",
       tag: ORCHESTRATION_V2_WS_METHODS.getWorkflowScript,
       staleTimeMs: 300_000,
       idleTtlMs: 300_000,
     }),
-    stopWorkflow: createEnvironmentRpcCommand(runtime, {
+    stopWorkflow: createMachineRpcCommand(runtime, {
       label: "machine-data:orchestration:stop-workflow",
       tag: ORCHESTRATION_V2_WS_METHODS.stopWorkflow,
     }),
-    turnItem: createEnvironmentRpcQueryAtomFamily(runtime, {
+    turnItem: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:orchestration:turn-item",
       tag: ORCHESTRATION_V2_WS_METHODS.getTurnItem,
       staleTimeMs: 60_000,
       idleTtlMs: 60_000,
     }),
-    fullThreadDiff: createEnvironmentRpcQueryAtomFamily(runtime, {
+    fullThreadDiff: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:orchestration:full-thread-diff",
       tag: ORCHESTRATION_V2_WS_METHODS.getFullThreadDiff,
     }),
-    threadFind: createEnvironmentRpcQueryAtomFamily(runtime, {
+    threadFind: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:orchestration:thread-find",
       tag: ORCHESTRATION_V2_WS_METHODS.searchThread,
       staleTimeMs: 0,
       idleTtlMs: 0,
     }),
-    threadFindProgressive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    threadFindProgressive: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:orchestration:thread-find-progressive",
       tag: ORCHESTRATION_V2_WS_METHODS.searchThreadStream,
       completeWhen: (result) => result.complete !== false,
       idleTtlMs: 0,
     }),
-    threadSearch: createEnvironmentRpcQueryAtomFamily(runtime, {
+    threadSearch: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:orchestration:thread-search",
       tag: ORCHESTRATION_V2_WS_METHODS.searchThreads,
       staleTimeMs: 30_000,
       idleTtlMs: 60_000,
     }),
-    archivedShellSnapshot: createEnvironmentRpcQueryAtomFamily(runtime, {
+    archivedShellSnapshot: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:orchestration:archived-shell-snapshot",
       tag: ORCHESTRATION_V2_WS_METHODS.getArchivedShellSnapshot,
     }),

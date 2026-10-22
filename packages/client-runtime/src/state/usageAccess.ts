@@ -5,10 +5,10 @@ import {
   type SessionGrantInput,
 } from "@vekrel/contracts";
 
-import type { EnvironmentConnectionPhase } from "../connection/presentation.ts";
+import type { MachineConnectionPhase } from "../connection/presentation.ts";
 
 export function resolveUsageAccess(input: {
-  readonly connectionPhase: EnvironmentConnectionPhase;
+  readonly connectionPhase: MachineConnectionPhase;
   readonly session: SessionGrantInput | null;
   readonly hasSessionError: boolean;
 }) {

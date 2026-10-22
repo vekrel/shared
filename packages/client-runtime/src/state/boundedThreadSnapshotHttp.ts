@@ -17,8 +17,8 @@ import * as ThreadSnapshotLoader from "./threadSnapshotHttp.ts";
 
 const DEFAULT_BOUNDED_THREAD_SNAPSHOT_TIMEOUT_MS = 6_000;
 
-export const fetchEnvironmentBoundedThreadSnapshot = Effect.fn(
-  "clientRuntime.state.fetchEnvironmentBoundedThreadSnapshot",
+export const fetchMachineBoundedThreadSnapshot = Effect.fn(
+  "clientRuntime.state.fetchMachineBoundedThreadSnapshot",
 )(function* (input: {
   readonly prepared: PreparedConnection;
   readonly threadId: ThreadId;
@@ -54,7 +54,7 @@ export const fetchEnvironmentBoundedThreadSnapshot = Effect.fn(
 /**
  * Older servers that lack the bounded route (plain/generic 404) fall back to
  * the existing full HTTP thread snapshot. Structured
- * EnvironmentResourceNotFoundError from either endpoint still means missing.
+ * MachineResourceNotFoundError from either endpoint still means missing.
  */
 export const layer: Layer.Layer<
   ThreadSnapshotLoader.ThreadSnapshotLoader,
@@ -70,7 +70,7 @@ export const layer: Layer.Layer<
     );
     return ThreadSnapshotLoader.ThreadSnapshotLoader.of({
       load: (prepared: PreparedConnection, threadId: ThreadId) => {
-        const loadFullFallback = ThreadSnapshotLoader.fetchEnvironmentThreadSnapshot({
+        const loadFullFallback = ThreadSnapshotLoader.fetchMachineThreadSnapshot({
           prepared,
           threadId,
           signer,
@@ -82,7 +82,7 @@ export const layer: Layer.Layer<
           })),
           Effect.provideService(HttpClient.HttpClient, httpClient),
           Effect.catchTags({
-            EnvironmentResourceNotFoundError: () =>
+            MachineResourceNotFoundError: () =>
               Effect.logDebug(
                 "Full thread snapshot not found over HTTP after bounded fallback; treating the thread as deleted.",
               ).pipe(
@@ -104,7 +104,7 @@ export const layer: Layer.Layer<
           ),
         );
 
-        return fetchEnvironmentBoundedThreadSnapshot({
+        return fetchMachineBoundedThreadSnapshot({
           prepared,
           threadId,
           signer,
@@ -125,7 +125,7 @@ export const layer: Layer.Layer<
           })),
           Effect.provideService(HttpClient.HttpClient, httpClient),
           Effect.catchTags({
-            EnvironmentResourceNotFoundError: () =>
+            MachineResourceNotFoundError: () =>
               Effect.logDebug(
                 "Bounded thread snapshot not found over HTTP; treating the thread as deleted.",
               ).pipe(

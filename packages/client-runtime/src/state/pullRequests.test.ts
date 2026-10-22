@@ -31,15 +31,15 @@ import {
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
-import * as EnvironmentRegistry from "../connection/registry.ts";
+import * as MachineRegistry from "../connection/registry.ts";
 import { SshConnectionProfile, type ConnectionCatalogEntry } from "../connection/catalog.ts";
 import * as ConnectionProfileStore from "../connection/profileStore.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import {
   createLinkedPullRequestSummaryAtomFamily,
-  createPullRequestEnvironmentAtoms,
+  createPullRequestMachineAtoms,
 } from "./pullRequests.ts";
 import * as PullRequestDiffLoader from "./pullRequestDiffHttp.ts";
 import { executeAtomQuery } from "./runtime.ts";
@@ -163,13 +163,13 @@ for (const scenario of [
               }),
           } as unknown as WsRpcProtocolClient;
         };
-        const { environmentRegistry, supervisor } = yield* makeTestRuntime(
+        const { machineRegistry, supervisor } = yield* makeTestRuntime(
           clientFor(false),
           single ? undefined : clientFor(true),
           localOrigin,
         );
         disableAlternate = SubscriptionRef.update(
-          environmentRegistry.entries,
+          machineRegistry.entries,
           (entries) =>
             new Map(
               [...entries].map(([id, entry]) => [
@@ -196,13 +196,13 @@ for (const scenario of [
             ? route(WS_METHODS.pullRequestsSummary, input)
             : route(WS_METHODS.pullRequestsRunAction, input)
         ).pipe(
-          Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+          Effect.provideService(MachineRegistry.MachineRegistry, machineRegistry),
           Effect.provideService(RpcPermissionGuard, { authorize: () => Effect.void }),
           Effect.provideService(GitHubRoutingPermissions, {
             ...trustedRouting,
             get: () => Effect.succeed(trusted ? "read-write" : "off"),
           }),
-          Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+          Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
           Effect.result,
         );
 
@@ -271,7 +271,7 @@ it.effect.each([
               }),
             [WS_METHODS.pullRequestsSummary]: () => Effect.succeed(null),
           }) as unknown as WsRpcProtocolClient;
-        const { environmentRegistry, supervisor } = yield* makeTestRuntime(
+        const { machineRegistry, supervisor } = yield* makeTestRuntime(
           clientFor(false),
           clientFor(true),
         );
@@ -281,8 +281,8 @@ it.effect.each([
             repository: "acme/web",
             number: 7,
           }).pipe(
-            Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
-            Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+            Effect.provideService(MachineRegistry.MachineRegistry, machineRegistry),
+            Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
             Effect.provideService(GitHubRoutingPermissions, trustedRouting),
           );
         const first = yield* read().pipe(Effect.forkChild);
@@ -331,7 +331,7 @@ it.effect.each(["revoked", "disabled"] as const)(
                 return null;
               }),
           }) as unknown as WsRpcProtocolClient;
-        const { environmentRegistry, supervisor } = yield* makeTestRuntime(
+        const { machineRegistry, supervisor } = yield* makeTestRuntime(
           clientFor(false),
           clientFor(true),
         );
@@ -345,8 +345,8 @@ it.effect.each(["revoked", "disabled"] as const)(
           ),
           { concurrency: "unbounded" },
         ).pipe(
-          Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
-          Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+          Effect.provideService(MachineRegistry.MachineRegistry, machineRegistry),
+          Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
           Effect.provideService(GitHubRoutingPermissions, {
             ...trustedRouting,
             get: () => Effect.sync(() => (trusted ? "read-write" : "off")),
@@ -358,7 +358,7 @@ it.effect.each(["revoked", "disabled"] as const)(
         if (change === "revoked") trusted = false;
         else
           yield* SubscriptionRef.update(
-            environmentRegistry.entries,
+            machineRegistry.entries,
             (entries) =>
               new Map(
                 [...entries].map(([id, entry]) => [
@@ -403,7 +403,7 @@ it.effect.each(["origin", "alternate"] as const)(
               }),
             [WS_METHODS.pullRequestsSummary]: () => Effect.succeed(null),
           }) as unknown as WsRpcProtocolClient;
-        const { environmentRegistry, supervisor, localSupervisor } = yield* makeTestRuntime(
+        const { machineRegistry, supervisor, localSupervisor } = yield* makeTestRuntime(
           clientFor(false),
           clientFor(true),
         );
@@ -413,8 +413,8 @@ it.effect.each(["origin", "alternate"] as const)(
             repository: "acme/web",
             number: 7,
           }).pipe(
-            Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
-            Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+            Effect.provideService(MachineRegistry.MachineRegistry, machineRegistry),
+            Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
             Effect.provideService(GitHubRoutingPermissions, trustedRouting),
           );
         const first = yield* read().pipe(Effect.forkChild);
@@ -461,7 +461,7 @@ it.effect("forgets routed viewed marks when a viewed-files batch fails", () =>
               invalidations.push({ machine, input });
             }),
         }) as unknown as WsRpcProtocolClient;
-      const { environmentRegistry, supervisor } = yield* makeTestRuntime(
+      const { machineRegistry, supervisor } = yield* makeTestRuntime(
         clientFor("origin"),
         clientFor("local"),
       );
@@ -478,10 +478,10 @@ it.effect("forgets routed viewed marks when a viewed-files batch fails", () =>
           }),
         );
       }).pipe(
-        Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+        Effect.provideService(MachineRegistry.MachineRegistry, machineRegistry),
         Effect.provideService(GitHubRoutingPermissions, trustedRouting),
         Effect.provideService(RpcPermissionGuard, { authorize: () => Effect.void }),
-        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+        Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
       );
       expect(write._tag).toBe("Failure");
       expect(invalidations).toContainEqual({
@@ -537,7 +537,7 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
     attempt: 1,
     generation: 1,
   };
-  const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+  const supervisor = MachineSupervisor.MachineSupervisor.of({
     target: originTarget,
     state: yield* SubscriptionRef.make(connectionState),
     session: yield* SubscriptionRef.make(Option.some(session(client))),
@@ -545,7 +545,7 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
     connect: Effect.void,
     disconnect: Effect.void,
     retryNow: Effect.void,
-  } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+  } satisfies MachineSupervisor.MachineSupervisor["Service"]);
   const localTarget = new PrimaryConnectionTarget({
     machineId: MachineId.make("local-machine"),
     label: "Local machine",
@@ -557,7 +557,7 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
     target: localTarget,
     session: yield* SubscriptionRef.make(Option.some(session(localClient ?? client))),
   };
-  const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
+  const machineRegistry = MachineRegistry.MachineRegistry.of({
     entries: yield* SubscriptionRef.make<ReadonlyMap<MachineId, ConnectionCatalogEntry>>(
       new Map([
         [
@@ -577,28 +577,28 @@ const makeTestRuntime = Effect.fn("makeTestRuntime")(function* (
     run: (machineId, effect) =>
       Effect.provideService(
         effect,
-        EnvironmentSupervisor.EnvironmentSupervisor,
+        MachineSupervisor.MachineSupervisor,
         machineId === localTarget.machineId ? localSupervisor : supervisor,
       ),
-    runStream: (_environmentId, stream) =>
-      Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-    followStream: (_environmentId, stream) =>
-      Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-  } as EnvironmentRegistry.EnvironmentRegistry["Service"]);
+    runStream: (_machineId, stream) =>
+      Stream.provideService(stream, MachineSupervisor.MachineSupervisor, supervisor),
+    followStream: (_machineId, stream) =>
+      Stream.provideService(stream, MachineSupervisor.MachineSupervisor, supervisor),
+  } as MachineRegistry.MachineRegistry["Service"]);
   const runtime = Atom.runtime(
     Layer.merge(
-      Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+      Layer.succeed(MachineRegistry.MachineRegistry, machineRegistry),
       Layer.succeed(
         PullRequestDiffLoader.PullRequestDiffLoader,
         PullRequestDiffLoader.PullRequestDiffLoader.of({ load: () => Effect.die("unused") }),
       ),
     ),
   );
-  const atoms = createPullRequestEnvironmentAtoms(runtime);
+  const atoms = createPullRequestMachineAtoms(runtime);
   const registry = yield* Effect.acquireRelease(Effect.sync(AtomRegistry.make), (registry) =>
     Effect.sync(() => registry.dispose()),
   );
-  return { runtime, atoms, registry, environmentRegistry, supervisor, localSupervisor };
+  return { runtime, atoms, registry, machineRegistry, supervisor, localSupervisor };
 });
 
 it.effect.each([
@@ -634,13 +634,13 @@ it.effect.each([
           [WS_METHODS.pullRequestsRoutingIdentity]: () =>
             Effect.die("untrusted machine was contacted"),
         } as unknown as WsRpcProtocolClient;
-        const { environmentRegistry, supervisor, localSupervisor } = yield* makeTestRuntime(
+        const { machineRegistry, supervisor, localSupervisor } = yield* makeTestRuntime(
           client,
           alternate,
         );
         if (permission === "destination-disabled" || permission === "destination-unsupported") {
           yield* SubscriptionRef.update(
-            environmentRegistry.entries,
+            machineRegistry.entries,
             (entries) =>
               new Map(
                 [...entries].map(([id, entry]) => [
@@ -670,8 +670,8 @@ it.effect.each([
             yield* route(WS_METHODS.pullRequestsSummary, ref).pipe(Effect.flip);
           yield* route(WS_METHODS.pullRequestsRunAction, { ...ref, action: "merge" });
         }).pipe(
-          Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
-          Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+          Effect.provideService(MachineRegistry.MachineRegistry, machineRegistry),
+          Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
           Effect.provideService(RpcPermissionGuard, { authorize: () => Effect.void }),
         );
         yield* permission === "default"
@@ -748,7 +748,7 @@ it.effect.each(
           }),
         [WS_METHODS.pullRequestsInvalidate]: () => Effect.void,
       } as unknown as WsRpcProtocolClient;
-      const { environmentRegistry, supervisor } = yield* makeTestRuntime(client, alternate);
+      const { machineRegistry, supervisor } = yield* makeTestRuntime(client, alternate);
       const machineId =
         side === "origin" ? TARGET.machineId : MachineId.make("local-machine");
       const profile = new SshConnectionProfile({
@@ -757,7 +757,7 @@ it.effect.each(
         label: "SSH",
         target: { alias: "work", hostname: "work.example.test", username: "maria", port: 22 },
       });
-      yield* SubscriptionRef.update(environmentRegistry.entries, (entries) =>
+      yield* SubscriptionRef.update(machineRegistry.entries, (entries) =>
         new Map(entries).set(machineId, {
           target: new SshConnectionTarget({
             machineId,
@@ -795,8 +795,8 @@ it.effect.each(
         number: 7,
         action: "merge",
       }).pipe(
-        Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
-        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+        Effect.provideService(MachineRegistry.MachineRegistry, machineRegistry),
+        Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
         Effect.provideService(GitHubRoutingPermissions, trustedRouting),
         Effect.provideService(RpcPermissionGuard, { authorize: () => Effect.void }),
       );
@@ -850,7 +850,7 @@ it.live.each([undefined, true, false])(
             [WS_METHODS.pullRequestsReportState]: (input: unknown) =>
               Deferred.succeed(noted, input).pipe(Effect.asVoid),
           }) as unknown as WsRpcProtocolClient;
-        const { environmentRegistry, supervisor } = yield* makeTestRuntime(
+        const { machineRegistry, supervisor } = yield* makeTestRuntime(
           clientFor(false),
           clientFor(true),
         );
@@ -859,10 +859,10 @@ it.live.each([undefined, true, false])(
           repository: "acme/web",
           number: 7,
         }).pipe(
-          Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+          Effect.provideService(MachineRegistry.MachineRegistry, machineRegistry),
           Effect.provideService(GitHubRoutingPermissions, trustedRouting),
           Effect.provideService(RpcPermissionGuard, { authorize: () => Effect.void }),
-          Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+          Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
         );
         expect(result).toEqual({
           projectId: "project-1",
@@ -915,7 +915,7 @@ it.live(
               }),
           } as unknown as WsRpcProtocolClient;
         };
-        const { environmentRegistry, supervisor } = yield* makeTestRuntime(
+        const { machineRegistry, supervisor } = yield* makeTestRuntime(
           clientFor(false),
           clientFor(true),
         );
@@ -955,10 +955,10 @@ it.live(
           yield* refresh(WS_METHODS.pullRequestsInvalidate, {});
           expect(invalidations).toContainEqual({ machine: "local", input: {} });
         }).pipe(
-          Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+          Effect.provideService(MachineRegistry.MachineRegistry, machineRegistry),
           Effect.provideService(GitHubRoutingPermissions, trustedRouting),
           Effect.provideService(RpcPermissionGuard, { authorize: () => Effect.void }),
-          Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+          Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
         );
       }),
     ),
@@ -1420,7 +1420,7 @@ it.effect("updates cached labels after successful edits without rereading the ho
 );
 
 vi.mock("./session.ts", () => ({
-  createEnvironmentSessionAtoms: () => ({ sessionStateAtom: grantedSessions }),
+  createMachineSessionAtoms: () => ({ sessionStateAtom: grantedSessions }),
 }));
 const grantedSessions = Atom.family((_id: MachineId) =>
   Atom.make<AsyncResult.AsyncResult<AuthSessionState>>(
@@ -1473,8 +1473,8 @@ it.effect("denies a routed write when only the origin has source-control permiss
         number: 1,
         action: "merge",
       }).pipe(
-        Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, fixture.environmentRegistry),
-        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, fixture.supervisor),
+        Effect.provideService(MachineRegistry.MachineRegistry, fixture.machineRegistry),
+        Effect.provideService(MachineSupervisor.MachineSupervisor, fixture.supervisor),
         Effect.provideService(GitHubRoutingPermissions, trustedRouting),
         Effect.provideService(RpcPermissionGuard, {
           authorize: (id, method, input) =>

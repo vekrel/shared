@@ -12,8 +12,8 @@ import {
 
 const DEFAULT_THREAD_HISTORY_TIMEOUT_MS = 6_000;
 
-export const fetchEnvironmentThreadHistoryPage = Effect.fn(
-  "clientRuntime.state.fetchEnvironmentThreadHistoryPage",
+export const fetchMachineThreadHistoryPage = Effect.fn(
+  "clientRuntime.state.fetchMachineThreadHistoryPage",
 )(function* (input: {
   readonly prepared: PreparedConnection;
   readonly threadId: ThreadId;

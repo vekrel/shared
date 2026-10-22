@@ -10,8 +10,8 @@ import {
   withOrchestrationProtocolHeader,
 } from "./machineHttpAuth.ts";
 
-export const fetchEnvironmentThreadTranscript = Effect.fn(
-  "clientRuntime.state.fetchEnvironmentThreadTranscript",
+export const fetchMachineThreadTranscript = Effect.fn(
+  "clientRuntime.state.fetchMachineThreadTranscript",
 )(function* (input: {
   readonly prepared: PreparedConnection;
   readonly threadId: ThreadId;

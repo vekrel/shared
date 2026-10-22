@@ -14,7 +14,7 @@ import { issueRemoteWebSocketTicket } from "./authorization/remote.ts";
 import { PrimaryConnectionTarget } from "./connection/model.ts";
 import { fetchRemoteMachineDescriptor } from "./machine/descriptor.ts";
 import type { RemoteMachineRequestError } from "./rpc/http.ts";
-import { fetchEnvironmentThreadSnapshot } from "./state/threadSnapshotHttp.ts";
+import { fetchMachineThreadSnapshot } from "./state/threadSnapshotHttp.ts";
 import { applyOrchestrationV2ProjectionEvent } from "./state/orchestrationV2Projection.ts";
 import { v2Projection, v2Now } from "./state/orchestrationV2TestFixtures.ts";
 
@@ -71,7 +71,7 @@ const requests: Record<
     httpBaseUrl: target.httpBaseUrl,
     bearerToken: "test-token",
   }),
-  "load remote snapshot with 100 messages": fetchEnvironmentThreadSnapshot({
+  "load remote snapshot with 100 messages": fetchMachineThreadSnapshot({
     prepared: {
       machineId: target.machineId,
       label: target.label,

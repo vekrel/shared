@@ -11,9 +11,9 @@ import * as Effect from "effect/Effect";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import type { EnvironmentPresentation } from "../connection/presentation.ts";
+import type { MachinePresentation } from "../connection/presentation.ts";
 import {
-  cursorKeychainAccessEnvironments,
+  cursorKeychainAccessMachines,
   needsCursorKeychainAccess,
   refreshUsage,
   refreshUsageLimits,
@@ -51,7 +51,7 @@ function harness(ids = ["a"]) {
     const scanStarted = Promise.withResolvers<void>();
     const presentation = Atom.make({
       connection: { phase: "connected" },
-    } as EnvironmentPresentation | null);
+    } as MachinePresentation | null);
     const query = Atom.make(
       Effect.promise(() => {
         scanStarted.resolve();
@@ -254,9 +254,9 @@ describe("needsCursorKeychainAccess", () => {
         },
       ],
     };
-    expect(cursorKeychainAccessEnvironments([off, off])).toEqual([off, off]);
+    expect(cursorKeychainAccessMachines([off, off])).toEqual([off, off]);
     expect(
-      cursorKeychainAccessEnvironments([
+      cursorKeychainAccessMachines([
         off,
         { summary: account, needsCursorKeychainAccess: false },
       ]),

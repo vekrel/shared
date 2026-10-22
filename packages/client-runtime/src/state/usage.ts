@@ -7,12 +7,12 @@ import type {
 import * as Schema from "effect/Schema";
 import type { AtomRegistry } from "effect/reactivity";
 
-import { EnvironmentRpcUnavailableError } from "../rpc/client.ts";
-import type { createEnvironmentPresentationAtoms } from "./presentation.ts";
+import { MachineRpcUnavailableError } from "../rpc/client.ts";
+import type { createMachinePresentationAtoms } from "./presentation.ts";
 import { executeAtomQuery, runAtomCommand, squashAtomCommandFailure } from "./runtime.ts";
 import type { createServerMachineAtoms } from "./server.ts";
 
-const isEnvironmentRpcUnavailable = Schema.is(EnvironmentRpcUnavailableError);
+const isMachineRpcUnavailable = Schema.is(MachineRpcUnavailableError);
 
 export function needsCursorKeychainAccess(
   summary: UsageSummary | null,
@@ -29,7 +29,7 @@ export function needsCursorKeychainAccess(
  * Any machine reading a Cursor account already reports that account's
  * history from every machine, so the prompt only adds duplicates there.
  */
-export function cursorKeychainAccessEnvironments<
+export function cursorKeychainAccessMachines<
   E extends { readonly summary: UsageSummary | null; readonly needsCursorKeychainAccess: boolean },
 >(machines: readonly E[]): readonly E[] {
   const hasCursorAccount = machines.some((machine) =>
@@ -88,7 +88,7 @@ export async function refreshUsage({
     ReturnType<typeof createServerMachineAtoms>,
     "usageSummary" | "refreshUsageRates"
   >;
-  presentations: Pick<ReturnType<typeof createEnvironmentPresentationAtoms>, "presentationAtom">;
+  presentations: Pick<ReturnType<typeof createMachinePresentationAtoms>, "presentationAtom">;
   machineIds: readonly MachineId[];
   input: UsageSummaryInput;
 }): Promise<void> {
@@ -111,7 +111,7 @@ export async function refreshUsage({
         );
         const sessionUnavailable =
           ratesResult._tag === "Failure" &&
-          isEnvironmentRpcUnavailable(squashAtomCommandFailure(ratesResult));
+          isMachineRpcUnavailable(squashAtomCommandFailure(ratesResult));
         registry.refresh(query);
         if (sessionUnavailable || controller.signal.aborted) return;
         await executeAtomQuery(registry, query, {

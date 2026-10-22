@@ -2,11 +2,11 @@ import {
   MachineHttpApi,
   MachineHttpCommonError,
   type MachineAuthInvalidError,
-  type EnvironmentInternalError,
-  type EnvironmentOperationForbiddenError,
-  type EnvironmentRequestInvalidError,
-  type EnvironmentResourceNotFoundError,
-  type EnvironmentScopeRequiredError,
+  type MachineInternalError,
+  type MachineOperationForbiddenError,
+  type MachineRequestInvalidError,
+  type MachineResourceNotFoundError,
+  type MachineScopeRequiredError,
 } from "@vekrel/contracts";
 import * as HttpObservability from "@vekrel/shared/httpObservability";
 import * as Data from "effect/Data";
@@ -67,12 +67,12 @@ export class RemoteMachineAuthTimeoutError extends Data.TaggedError(
 }
 
 export type RemoteMachineRequestError =
-  | EnvironmentRequestInvalidError
+  | MachineRequestInvalidError
   | MachineAuthInvalidError
-  | EnvironmentScopeRequiredError
-  | EnvironmentOperationForbiddenError
-  | EnvironmentResourceNotFoundError
-  | EnvironmentInternalError
+  | MachineScopeRequiredError
+  | MachineOperationForbiddenError
+  | MachineResourceNotFoundError
+  | MachineInternalError
   | RemoteMachineAuthFetchError
   | RemoteMachineAuthInvalidJsonError
   | RemoteMachineAuthUndeclaredStatusError

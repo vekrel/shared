@@ -1,5 +1,5 @@
 import type {
-  RelayClientEnvironmentRecord,
+  RelayClientMachineRecord,
   RelayMachineStatusResponse,
 } from "@vekrel/contracts/relay";
 import type { MachineId } from "@vekrel/contracts";
@@ -191,7 +191,7 @@ function readSessionClerkToken(
 }
 
 export const deregisterManagedRelayMachine = Effect.fn(
-  "clientRuntime.managedRelaySession.deregisterEnvironment",
+  "clientRuntime.managedRelaySession.deregisterMachine",
 )(function* (
   registry: AtomRegistry.AtomRegistry,
   input: { readonly accountId: string; readonly machineId: MachineId },
@@ -224,24 +224,24 @@ function requireClerkToken(
 
 function statusKey(input: {
   readonly accountId: string;
-  readonly machine: RelayClientEnvironmentRecord;
+  readonly machine: RelayClientMachineRecord;
 }): string {
   return JSON.stringify(input);
 }
 
 function parseStatusKey(key: string): {
   readonly accountId: string;
-  readonly machine: RelayClientEnvironmentRecord;
+  readonly machine: RelayClientMachineRecord;
 } {
   return JSON.parse(key) as {
     readonly accountId: string;
-    readonly machine: RelayClientEnvironmentRecord;
+    readonly machine: RelayClientMachineRecord;
   };
 }
 
 function endpointMatches(
-  left: RelayClientEnvironmentRecord["endpoint"],
-  right: RelayClientEnvironmentRecord["endpoint"],
+  left: RelayClientMachineRecord["endpoint"],
+  right: RelayClientMachineRecord["endpoint"],
 ): boolean {
   return (
     left.httpBaseUrl === right.httpBaseUrl &&
@@ -250,8 +250,8 @@ function endpointMatches(
   );
 }
 
-function validateEnvironmentStatus(
-  machine: RelayClientEnvironmentRecord,
+function validateMachineStatus(
+  machine: RelayClientMachineRecord,
   status: RelayMachineStatusResponse,
 ): Effect.Effect<RelayMachineStatusResponse, ManagedRelaySnapshotError> {
   if (status.machineId !== machine.machineId) {
@@ -335,7 +335,7 @@ export function createManagedRelayQueryManager(
     );
   });
 
-  const environmentsAtom = Atom.family((accountId: string) =>
+  const machinesAtom = Atom.family((accountId: string) =>
     runtime
       .atom((get) =>
         Effect.gen(function* () {
@@ -381,7 +381,7 @@ export function createManagedRelayQueryManager(
       ),
   );
 
-  const environmentStatusAtom = Atom.family((key: string) => {
+  const machineStatusAtom = Atom.family((key: string) => {
     const { accountId, machine } = parseStatusKey(key);
     return runtime
       .atom((get) =>
@@ -406,7 +406,7 @@ export function createManagedRelayQueryManager(
           );
           return yield* observe(
             { ...base, stage: "validation" },
-            validateEnvironmentStatus(machine, status),
+            validateMachineStatus(machine, status),
           );
         }),
       )
@@ -418,26 +418,26 @@ export function createManagedRelayQueryManager(
   });
 
   return {
-    environmentsAtom,
+    machinesAtom,
     devicesAtom,
-    environmentStatusAtom: (input: {
+    machineStatusAtom: (input: {
       readonly accountId: string;
-      readonly machine: RelayClientEnvironmentRecord;
-    }) => environmentStatusAtom(statusKey(input)),
-    refreshEnvironments(registry: AtomRegistry.AtomRegistry, accountId: string): void {
-      registry.refresh(environmentsAtom(accountId));
+      readonly machine: RelayClientMachineRecord;
+    }) => machineStatusAtom(statusKey(input)),
+    refreshMachines(registry: AtomRegistry.AtomRegistry, accountId: string): void {
+      registry.refresh(machinesAtom(accountId));
     },
     refreshDevices(registry: AtomRegistry.AtomRegistry, accountId: string): void {
       registry.refresh(devicesAtom(accountId));
     },
-    refreshEnvironmentStatus(
+    refreshMachineStatus(
       registry: AtomRegistry.AtomRegistry,
       input: {
         readonly accountId: string;
-        readonly machine: RelayClientEnvironmentRecord;
+        readonly machine: RelayClientMachineRecord;
       },
     ): void {
-      registry.refresh(environmentStatusAtom(statusKey(input)));
+      registry.refresh(machineStatusAtom(statusKey(input)));
     },
   };
 }

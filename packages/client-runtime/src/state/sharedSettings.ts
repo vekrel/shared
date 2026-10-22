@@ -8,7 +8,7 @@ import { isModelSelectionProviderEnabled } from "@vekrel/shared/serverSettings";
 import * as Equal from "effect/Equal";
 import * as Struct from "effect/Struct";
 
-import type { EnvironmentConnectionPhase } from "../connection/presentation.ts";
+import type { MachineConnectionPhase } from "../connection/presentation.ts";
 
 const SHARED_SERVER_SETTING_KEYS = [
   "continueThreadsAfterServerUpdate",
@@ -85,7 +85,7 @@ export function pickSharedServerSettings(
 }
 
 export function supportsSharedSettingsSync(machine: {
-  readonly connection: { readonly phase: EnvironmentConnectionPhase };
+  readonly connection: { readonly phase: MachineConnectionPhase };
   readonly serverConfig: {
     readonly machine: {
       readonly capabilities: Pick<ExecutionMachineCapabilities, "threadAutoSettlement">;
@@ -98,7 +98,7 @@ export function supportsSharedSettingsSync(machine: {
   );
 }
 
-export interface SharedSettingsEnvironment {
+export interface SharedSettingsMachine {
   readonly machineId: MachineId;
   readonly label: string;
   readonly syncEligible: boolean;
@@ -118,7 +118,7 @@ export function findSharedSettingsMismatches(input: {
   readonly primaryCapabilities?:
     | Pick<ExecutionMachineCapabilities, "threadRestartContinuation">
     | undefined;
-  readonly machines: ReadonlyArray<SharedSettingsEnvironment>;
+  readonly machines: ReadonlyArray<SharedSettingsMachine>;
 }): ReadonlyArray<{ readonly machineId: MachineId; readonly label: string }> {
   if (input.primaryMachineId === null || input.primarySettings === null) {
     return [];

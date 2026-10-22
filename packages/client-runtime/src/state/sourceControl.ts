@@ -3,29 +3,29 @@ import { Atom } from "effect/reactivity";
 
 import {
   createAtomCommandScheduler,
-  createEnvironmentRpcCommand,
-  createEnvironmentRpcQueryAtomFamily,
-  createEnvironmentRpcSubscriptionAtomFamily,
+  createMachineRpcCommand,
+  createMachineRpcQueryAtomFamily,
+  createMachineRpcSubscriptionAtomFamily,
 } from "./runtime.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
 import * as Persistence from "../platform/persistence.ts";
 import { vcsCommandConcurrency, vcsCommandScheduler } from "./vcsCommandScheduler.ts";
 import { invalidateCachedVcsRefs } from "./vcsRefInvalidation.ts";
 
-export function createSourceControlEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | Persistence.EnvironmentCacheStore | R, E>,
+export function createSourceControlMachineAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry | Persistence.MachineCacheStore | R, E>,
 ) {
   const commandScheduler = createAtomCommandScheduler();
   return {
-    discovery: createEnvironmentRpcQueryAtomFamily(runtime, {
+    discovery: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:server:source-control-discovery",
       tag: WS_METHODS.serverDiscoverSourceControl,
     }),
-    repository: createEnvironmentRpcQueryAtomFamily(runtime, {
+    repository: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:source-control:repository",
       tag: WS_METHODS.sourceControlLookupRepository,
     }),
-    cloneRepository: createEnvironmentRpcCommand(runtime, {
+    cloneRepository: createMachineRpcCommand(runtime, {
       label: "machine-data:source-control:clone-repository",
       tag: WS_METHODS.sourceControlCloneRepository,
       scheduler: commandScheduler,
@@ -36,7 +36,7 @@ export function createSourceControlEnvironmentAtoms<R, E>(
     }),
     // Clone-backed project creation. The RPC returns once the project exists
     // and the clone runs in the background; `projectClones` carries progress.
-    startProjectClone: createEnvironmentRpcCommand(runtime, {
+    startProjectClone: createMachineRpcCommand(runtime, {
       label: "machine-data:source-control:project-clone-start",
       tag: WS_METHODS.projectCloneStart,
       scheduler: commandScheduler,
@@ -47,7 +47,7 @@ export function createSourceControlEnvironmentAtoms<R, E>(
     }),
     // Cancel and retry share the start queue so a double click cannot race
     // two actions against the same clone.
-    cancelProjectClone: createEnvironmentRpcCommand(runtime, {
+    cancelProjectClone: createMachineRpcCommand(runtime, {
       label: "machine-data:source-control:project-clone-cancel",
       tag: WS_METHODS.projectCloneCancel,
       scheduler: commandScheduler,
@@ -56,7 +56,7 @@ export function createSourceControlEnvironmentAtoms<R, E>(
         key: ({ machineId }) => machineId,
       },
     }),
-    retryProjectClone: createEnvironmentRpcCommand(runtime, {
+    retryProjectClone: createMachineRpcCommand(runtime, {
       label: "machine-data:source-control:project-clone-retry",
       tag: WS_METHODS.projectCloneRetry,
       scheduler: commandScheduler,
@@ -65,11 +65,11 @@ export function createSourceControlEnvironmentAtoms<R, E>(
         key: ({ machineId }) => machineId,
       },
     }),
-    projectClones: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    projectClones: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:source-control:project-clones",
       tag: WS_METHODS.subscribeProjectClones,
     }),
-    publishRepository: createEnvironmentRpcCommand(runtime, {
+    publishRepository: createMachineRpcCommand(runtime, {
       label: "machine-data:source-control:publish-repository",
       tag: WS_METHODS.sourceControlPublishRepository,
       scheduler: vcsCommandScheduler,

@@ -10,16 +10,16 @@ import {
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import { createEnvironmentSessionAtoms } from "./session.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
+import { createMachineSessionAtoms } from "./session.ts";
 
 function makeCommandPermissions<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  runtime: Atom.AtomRuntime<MachineRegistry | R, E>,
   method: string,
 ) {
-  const sessions = createEnvironmentSessionAtoms(runtime);
+  const sessions = createMachineSessionAtoms(runtime);
   const requiredScopes = (input?: unknown) => clientRpcRequiredScopes(method, input);
-  const atomsByEnvironment = Atom.family((machineId: MachineId | null) =>
+  const atomsByMachine = Atom.family((machineId: MachineId | null) =>
     Atom.family((scopeKey: string) =>
       Atom.make((get) => {
         if (machineId === null) return false;
@@ -36,7 +36,7 @@ function makeCommandPermissions<R, E>(
     ),
   );
   const permissionAtom = (machineId: MachineId | null, input?: unknown) =>
-    atomsByEnvironment(machineId)(requiredScopes(input).join(","));
+    atomsByMachine(machineId)(requiredScopes(input).join(","));
   const authorize = (
     registry: AtomRegistry.AtomRegistry,
     machineId: MachineId,
@@ -77,7 +77,7 @@ const permissionsByRuntime = new WeakMap<
 >();
 
 export function createCommandPermissions<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  runtime: Atom.AtomRuntime<MachineRegistry | R, E>,
   method: string,
 ) {
   let permissions = permissionsByRuntime.get(runtime);

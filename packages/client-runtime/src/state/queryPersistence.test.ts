@@ -3,7 +3,7 @@ import { MachineId, ProjectId } from "@vekrel/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { EnvironmentQueryStore, persistQuery } from "./queryPersistence.ts";
+import { MachineQueryStore, persistQuery } from "./queryPersistence.ts";
 
 import { persistPullRequestStats } from "./pullRequestStatsPersistence.ts";
 
@@ -29,7 +29,7 @@ describe("query persistence", () => {
       expect(yield* persisted.load(env, "open")).toEqual(Option.some({ title: "saved" }));
       expect(yield* persisted.load(other, "open")).toEqual(Option.none());
       expect(yield* persisted.load(env, "closed")).toEqual(Option.none());
-    }).pipe(Effect.provideService(EnvironmentQueryStore, store())),
+    }).pipe(Effect.provideService(MachineQueryStore, store())),
   );
 
   it.effect("ignores corrupt or incompatible records", () =>
@@ -38,7 +38,7 @@ describe("query persistence", () => {
       expect(yield* persisted.load(env, "incompatible")).toEqual(Option.none());
     }).pipe(
       Effect.provideService(
-        EnvironmentQueryStore,
+        MachineQueryStore,
         store(
           new Map([
             ["one:broken", "not json"],
@@ -60,5 +60,5 @@ it.effect("restores line counts when visible PR batches change", () =>
     const key = JSON.stringify(["stats", { refs: [first] }]);
     expect(yield* cache.load(env, key)).toEqual(Option.some({ stats: [stat] }));
     expect(yield* cache.load(other, key)).toEqual(Option.none());
-  }).pipe(Effect.provideService(EnvironmentQueryStore, store())),
+  }).pipe(Effect.provideService(MachineQueryStore, store())),
 );

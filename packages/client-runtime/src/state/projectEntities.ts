@@ -8,17 +8,17 @@ import type {
 } from "@vekrel/contracts";
 import { Atom } from "effect/reactivity";
 
-import type { EnvironmentProject } from "./models.ts";
+import type { MachineProject } from "./models.ts";
 import { scopeProject } from "./models.ts";
 import { isScratchProject } from "./projects.ts";
-import { type EnvironmentCatalogState, enabledMachineIds } from "./connections.ts";
+import { type MachineCatalogState, enabledMachineIds } from "./connections.ts";
 import { arrayElementsEqual, parseProjectKey, projectKey, projectRefsEqual } from "./entities.ts";
 
 const EMPTY_PROJECTS: ReadonlyArray<OrchestrationProjectShell> = Object.freeze([]);
 const EMPTY_PROJECT_INDEX: ReadonlyMap<ProjectId, OrchestrationProjectShell> = new Map();
 
-export function createEnvironmentProjectAtoms(input: {
-  readonly catalogValueAtom: Atom.Atom<EnvironmentCatalogState>;
+export function createMachineProjectAtoms(input: {
+  readonly catalogValueAtom: Atom.Atom<MachineCatalogState>;
   readonly snapshotAtom: (
     machineId: MachineId,
   ) => Atom.Atom<OrchestrationV2ShellSnapshot | null>;
@@ -26,16 +26,16 @@ export function createEnvironmentProjectAtoms(input: {
     machineId: MachineId,
   ) => Atom.Atom<Pick<ServerConfig, "scratchWorkspaceRoot"> | null>;
 }) {
-  const environmentProjectsAtom = Atom.family((machineId: MachineId) =>
+  const machineProjectsAtom = Atom.family((machineId: MachineId) =>
     Atom.make(
       (get): ReadonlyArray<OrchestrationProjectShell> =>
         get(input.snapshotAtom(machineId))?.projects ?? EMPTY_PROJECTS,
     ).pipe(Atom.withLabel(`machine-projects:${machineId}`)),
   );
 
-  const environmentProjectIndexAtom = Atom.family((machineId: MachineId) =>
+  const machineProjectIndexAtom = Atom.family((machineId: MachineId) =>
     Atom.make((get): ReadonlyMap<ProjectId, OrchestrationProjectShell> => {
-      const projects = get(environmentProjectsAtom(machineId));
+      const projects = get(machineProjectsAtom(machineId));
       if (projects.length === 0) {
         return EMPTY_PROJECT_INDEX;
       }
@@ -43,10 +43,10 @@ export function createEnvironmentProjectAtoms(input: {
     }).pipe(Atom.withLabel(`machine-project-index:${machineId}`)),
   );
 
-  const environmentProjectRefsAtom = Atom.family((machineId: MachineId) => {
+  const machineProjectRefsAtom = Atom.family((machineId: MachineId) => {
     let previous: ReadonlyArray<ScopedProjectRef> = [];
     return Atom.make((get) => {
-      const next = get(environmentProjectsAtom(machineId)).map((project) => ({
+      const next = get(machineProjectsAtom(machineId)).map((project) => ({
         machineId,
         projectId: project.id,
       }));
@@ -62,9 +62,9 @@ export function createEnvironmentProjectAtoms(input: {
     const ref = parseProjectKey(key);
     let previousSource: OrchestrationProjectShell | null = null;
     let previousIsScratch = false;
-    let previousValue: EnvironmentProject | null = null;
+    let previousValue: MachineProject | null = null;
     return Atom.make((get) => {
-      const source = get(environmentProjectIndexAtom(ref.machineId)).get(ref.projectId) ?? null;
+      const source = get(machineProjectIndexAtom(ref.machineId)).get(ref.projectId) ?? null;
       const scratch =
         source !== null &&
         isScratchProject(
@@ -93,7 +93,7 @@ export function createEnvironmentProjectAtoms(input: {
   const projectRefsAtom = Atom.make((get) => {
     const refs: ScopedProjectRef[] = [];
     for (const machineId of enabledMachineIds(get(input.catalogValueAtom))) {
-      refs.push(...get(environmentProjectRefsAtom(machineId)));
+      refs.push(...get(machineProjectRefsAtom(machineId)));
     }
     if (projectRefsEqual(previousProjectRefs, refs)) {
       return previousProjectRefs;
@@ -102,7 +102,7 @@ export function createEnvironmentProjectAtoms(input: {
     return refs;
   }).pipe(Atom.withLabel("machine-project-refs"));
 
-  let previousProjects: ReadonlyArray<EnvironmentProject> = [];
+  let previousProjects: ReadonlyArray<MachineProject> = [];
   const projectsAtom = Atom.make((get) => {
     const next = get(projectRefsAtom).flatMap((ref) => {
       const project = get(projectAtomFamily(projectKey(ref)));
@@ -127,9 +127,9 @@ export function createEnvironmentProjectAtoms(input: {
   }).pipe(Atom.withLabel("machine-project-configs-ready"));
 
   return {
-    environmentProjectsAtom,
-    environmentProjectIndexAtom,
-    environmentProjectRefsAtom,
+    machineProjectsAtom,
+    machineProjectIndexAtom,
+    machineProjectRefsAtom,
     projectRefsAtom,
     projectsAtom,
     projectConfigsReadyAtom,

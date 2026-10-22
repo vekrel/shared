@@ -9,10 +9,10 @@ import {
 import { Atom } from "effect/reactivity";
 
 import type {
-  EnvironmentConnectionPhase,
-  EnvironmentConnectionPresentation,
+  MachineConnectionPhase,
+  MachineConnectionPresentation,
 } from "../connection/presentation.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
 import {
   canNavigateUp,
   getBrowseDirectoryPath,
@@ -21,11 +21,11 @@ import {
   hasTrailingPathSeparator,
   isFilesystemBrowseQuery,
 } from "./projects.ts";
-import { createEnvironmentRpcQueryAtomFamily } from "./runtime.ts";
+import { createMachineRpcQueryAtomFamily } from "./runtime.ts";
 
 export function resolveFilesystemReadAccess(input: {
   readonly isCatalogReady: boolean;
-  readonly connection: Pick<EnvironmentConnectionPresentation, "phase" | "error"> | null;
+  readonly connection: Pick<MachineConnectionPresentation, "phase" | "error"> | null;
   readonly session: SessionGrantInput | null;
   readonly sessionError: string | null;
 }) {
@@ -106,20 +106,20 @@ export function createBrowseNavigationCoordinator() {
 }
 
 export function canPreloadBrowsePath(
-  connectionPhase: EnvironmentConnectionPhase | null | undefined,
+  connectionPhase: MachineConnectionPhase | null | undefined,
 ): boolean {
   return connectionPhase === "connected";
 }
 
-export function createFilesystemEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+export function createFilesystemMachineAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry | R, E>,
 ) {
   return {
-    getMetadata: createEnvironmentRpcQueryAtomFamily(runtime, {
+    getMetadata: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:filesystem:get-metadata",
       tag: WS_METHODS.filesystemGetMetadata,
     }),
-    browse: createEnvironmentRpcQueryAtomFamily(runtime, {
+    browse: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:filesystem:browse",
       tag: WS_METHODS.filesystemBrowse,
     }),

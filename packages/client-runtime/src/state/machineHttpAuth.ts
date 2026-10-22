@@ -44,7 +44,7 @@ export function withOrchestrationProtocolHeader(
  * per-request via `FetchHttpClient.RequestInit`, which the fetch client reads
  * from the fiber context at request time.
  */
-const withEnvironmentCredentials = <A, E, R>(
+const withMachineCredentials = <A, E, R>(
   authorization: PreparedHttpAuthorization | null,
   request: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
@@ -97,18 +97,18 @@ export const executeAuthenticatedMachineHttpRequest = <
   E,
   R,
 >(
-  input: Parameters<typeof executeEnvironmentRequest<Group, A, E, R>>[0],
+  input: Parameters<typeof executeMachineRequest<Group, A, E, R>>[0],
 ) =>
   input.prepared.httpAuthorization?._tag === "Dpop"
-    ? executeEnvironmentRequest(input).pipe(
-        Effect.withSpan(ENVIRONMENT_REQUEST_SPAN, { root: true }),
+    ? executeMachineRequest(input).pipe(
+        Effect.withSpan(MACHINE_REQUEST_SPAN, { root: true }),
         withRelayClientTracing,
       )
-    : executeEnvironmentRequest(input).pipe(Effect.withSpan(ENVIRONMENT_REQUEST_SPAN));
+    : executeMachineRequest(input).pipe(Effect.withSpan(MACHINE_REQUEST_SPAN));
 
-const ENVIRONMENT_REQUEST_SPAN = "clientRuntime.state.executeAuthenticatedMachineHttpRequest";
+const MACHINE_REQUEST_SPAN = "clientRuntime.state.executeAuthenticatedMachineHttpRequest";
 
-const executeEnvironmentRequest = Effect.fnUntraced(function* <
+const executeMachineRequest = Effect.fnUntraced(function* <
   Group extends Parameters<typeof makeMachineHttpApiGroupClient>[1],
   A,
   E,
@@ -184,7 +184,7 @@ const executeEnvironmentRequest = Effect.fnUntraced(function* <
       const result = yield* executeMachineHttpRequest(
         requestUrl,
         input.timeoutMs,
-        withEnvironmentCredentials(authorization, input.request({ client, headers })),
+        withMachineCredentials(authorization, input.request({ client, headers })),
       ).pipe(Effect.result);
 
       if (Result.isFailure(result)) {

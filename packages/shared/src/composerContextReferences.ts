@@ -323,7 +323,7 @@ export function projectComposerContextForProvider(input: {
 }
 
 // Thread reads are machine-local even when a draft moves between machines.
-export function threadContextsOutsideEnvironment(input: {
+export function threadContextsOutsideMachine(input: {
   text: string;
   records: ReadonlyArray<ComposerContextRecord>;
   machineId: MachineId;

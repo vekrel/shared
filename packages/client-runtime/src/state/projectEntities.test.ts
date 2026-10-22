@@ -4,14 +4,14 @@ import * as Option from "effect/Option";
 import { describe, expect, it } from "vite-plus/test";
 
 import { PrimaryConnectionTarget } from "../connection/model.ts";
-import { createEnvironmentProjectAtoms } from "./projectEntities.ts";
+import { createMachineProjectAtoms } from "./projectEntities.ts";
 import { v2Project, v2ShellSnapshot } from "./orchestrationV2TestFixtures.ts";
 
 const machineId = MachineId.make("local");
 const remoteMachineId = MachineId.make("remote");
 
 function makeHarness(withConfig = true) {
-  const snapshotAtom = Atom.family((_environmentId: MachineId) =>
+  const snapshotAtom = Atom.family((_machineId: MachineId) =>
     Atom.make({
       ...v2ShellSnapshot,
       projects: [
@@ -25,7 +25,7 @@ function makeHarness(withConfig = true) {
       ],
     }),
   );
-  const configAtom = Atom.family((_environmentId: MachineId) =>
+  const configAtom = Atom.family((_machineId: MachineId) =>
     Atom.make<(Pick<ServerConfig, "scratchWorkspaceRoot"> & { revision?: number }) | null>(null),
   );
   const catalogValueAtom = Atom.make({
@@ -46,7 +46,7 @@ function makeHarness(withConfig = true) {
       ]),
     ),
   });
-  const projects = createEnvironmentProjectAtoms({
+  const projects = createMachineProjectAtoms({
     catalogValueAtom,
     snapshotAtom,
     ...(withConfig ? { serverConfigValueAtom: configAtom } : {}),

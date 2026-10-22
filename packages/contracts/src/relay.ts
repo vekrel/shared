@@ -714,16 +714,16 @@ export class RelayDpopClientAuth extends HttpApiMiddleware.Service<
   security: { relayDpop: RelayDpopAuthorization },
 }) {}
 
-export const RelayClientEnvironmentRecord = Schema.Struct({
+export const RelayClientMachineRecord = Schema.Struct({
   machineId: MachineId,
   label: TrimmedNonEmptyString,
   endpoint: RelayManagedEndpoint,
   linkedAt: TrimmedNonEmptyString,
 });
-export type RelayClientEnvironmentRecord = typeof RelayClientEnvironmentRecord.Type;
+export type RelayClientMachineRecord = typeof RelayClientMachineRecord.Type;
 
 export const RelayListMachinesResponse = Schema.Struct({
-  machines: Schema.Array(RelayClientEnvironmentRecord),
+  machines: Schema.Array(RelayClientMachineRecord),
 });
 export type RelayListMachinesResponse = typeof RelayListMachinesResponse.Type;
 

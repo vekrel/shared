@@ -1,5 +1,5 @@
 import { requestGuarded, runStreamGuarded } from "../rpc/client.ts";
-import { EnvironmentSupervisor } from "../connection/supervisor.ts";
+import { MachineSupervisor } from "../connection/supervisor.ts";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
@@ -23,12 +23,12 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import { Atom, AtomRegistry, AsyncResult } from "effect/reactivity";
-import { EnvironmentRegistry } from "../connection/registry.ts";
+import { MachineRegistry } from "../connection/registry.ts";
 import { createCommandPermissions } from "./commandPermissions.ts";
-import { createEnvironmentRpcCommand } from "./runtime.ts";
+import { createMachineRpcCommand } from "./runtime.ts";
 
 vi.mock("./session.ts", () => ({
-  createEnvironmentSessionAtoms: () => ({ sessionStateAtom: sessions }),
+  createMachineSessionAtoms: () => ({ sessionStateAtom: sessions }),
 }));
 const sessions = Atom.family((_id: MachineId) =>
   Atom.make<AsyncResult.AsyncResult<AuthSessionState, string>>(AsyncResult.initial()),
@@ -47,9 +47,9 @@ const grant = (allowed: boolean): AuthSessionState => ({
   permissions: allowed ? [AuthOrchestrationOperateScope] : [],
 });
 const runtime = Atom.runtime(
-  Layer.succeed(EnvironmentRegistry, {
+  Layer.succeed(MachineRegistry, {
     run: (_id: MachineId, effect: Effect.Effect<unknown>) => effect,
-  } as unknown as EnvironmentRegistry["Service"]),
+  } as unknown as MachineRegistry["Service"]),
 );
 const permissions = createCommandPermissions(runtime, WS_METHODS.scheduledTasksDelete);
 const setup = Effect.gen(function* () {
@@ -176,7 +176,7 @@ describe("command permissions", () => {
       release = resolve;
     });
     let calls = 0;
-    const command = createEnvironmentRpcCommand(runtime, {
+    const command = createMachineRpcCommand(runtime, {
       label: "test.delete",
       tag: WS_METHODS.scheduledTasksDelete,
       concurrency: { mode: "serial", key: () => "target" },
@@ -332,16 +332,16 @@ it.effect("rejects protected unary and streamed RPCs outside a guarded command",
     const supervisor = {
       target: { machineId: env, label: "target" },
       session: yield* SubscriptionRef.make(Option.some(session)),
-    } as unknown as EnvironmentSupervisor["Service"];
+    } as unknown as MachineSupervisor["Service"];
     const unary = yield* requestGuarded(WS_METHODS.scheduledTasksDelete, {
       id: ScheduledTaskId.make("task"),
-    }).pipe(Effect.provideService(EnvironmentSupervisor, supervisor), Effect.flip);
+    }).pipe(Effect.provideService(MachineSupervisor, supervisor), Effect.flip);
     expect(unary._tag).toBe("MachineAuthorizationError");
     const streamed = yield* runStreamGuarded(WS_METHODS.gitRunStackedAction, {
       actionId: "test-action",
       cwd: "/repo",
       action: "commit",
-    }).pipe(Stream.runDrain, Effect.provideService(EnvironmentSupervisor, supervisor), Effect.flip);
+    }).pipe(Stream.runDrain, Effect.provideService(MachineSupervisor, supervisor), Effect.flip);
     expect(streamed._tag).toBe("MachineAuthorizationError");
     expect(writes).toBe(0);
   }),

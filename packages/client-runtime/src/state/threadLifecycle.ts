@@ -20,7 +20,7 @@ export function createOptimisticThreadLifecycle(
     machineId: MachineId,
   ) => Atom.Atom<OrchestrationV2ShellSnapshot | null>,
 ) {
-  const pendingAtom = Atom.family((_environmentId: MachineId) =>
+  const pendingAtom = Atom.family((_machineId: MachineId) =>
     Atom.make<ReadonlyArray<PendingThreadUpdate>>([]).pipe(Atom.keepAlive),
   );
   const snapshotAtom = Atom.family((machineId: MachineId) =>

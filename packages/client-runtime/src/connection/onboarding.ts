@@ -30,7 +30,7 @@ import {
   type ConnectionAttemptError,
 } from "./model.ts";
 import * as Persistence from "../platform/persistence.ts";
-import * as EnvironmentRegistry from "./registry.ts";
+import * as MachineRegistry from "./registry.ts";
 import { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
 import { connectionRoutes, routeEntry, sshTargetKey } from "./routes.ts";
 
@@ -148,12 +148,12 @@ const registerPairingConnection = Effect.fn(
   "clientRuntime.connection.onboarding.registerPairingConnection",
 )(function* (input: PairingConnectionInput) {
   const registration = yield* preparePairingRegistration(input);
-  const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+  const registry = yield* MachineRegistry.MachineRegistry;
   if (!(yield* registry.register(registration))) return registration.target.machineId;
   yield* registry.setCompatibility(registration.target.machineId, null);
   yield* registry
     .setEnabled(registration.target.machineId, true)
-    .pipe(Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }));
+    .pipe(Effect.catchTags({ MachineNotRegisteredError: () => Effect.void }));
   return registration.target.machineId;
 });
 
@@ -163,7 +163,7 @@ const isBearerProfile = Schema.is(BearerConnectionProfile);
 const updateBearerConnection = Effect.fn(
   "clientRuntime.connection.onboarding.updateBearerConnection",
 )(function* (input: BearerConnectionUpdateInput) {
-  const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+  const registry = yield* MachineRegistry.MachineRegistry;
   const credentials = yield* ConnectionCredentialStore.ConnectionCredentialStore;
   const saved = (yield* SubscriptionRef.get(registry.entries)).get(input.machineId);
   const route =
@@ -281,14 +281,14 @@ const registerSshConnection = Effect.fn(
   ) {
     return yield* differentMachineError(registration.target.label);
   }
-  const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+  const registry = yield* MachineRegistry.MachineRegistry;
   yield* registry.register(registration);
   return registration.target.machineId;
 });
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
-  const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+  const registry = yield* MachineRegistry.MachineRegistry;
   const presentation = yield* ClientCapabilities.ClientPresentation;
   const httpClient = yield* HttpClient.HttpClient;
   const ssh = yield* ClientCapabilities.SshMachineGateway;
@@ -297,18 +297,18 @@ export const make = Effect.gen(function* () {
   return ConnectionOnboarding.of({
     registerPairing: (input) =>
       registerPairingConnection(input).pipe(
-        Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, registry),
+        Effect.provideService(MachineRegistry.MachineRegistry, registry),
         Effect.provideService(ClientCapabilities.ClientPresentation, presentation),
         Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
     registerSsh: (input) =>
       registerSshConnection(input).pipe(
-        Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, registry),
+        Effect.provideService(MachineRegistry.MachineRegistry, registry),
         Effect.provideService(ClientCapabilities.SshMachineGateway, ssh),
       ),
     updateBearer: (input) =>
       updateBearerConnection(input).pipe(
-        Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, registry),
+        Effect.provideService(MachineRegistry.MachineRegistry, registry),
         Effect.provideService(ConnectionCredentialStore.ConnectionCredentialStore, credentials),
       ),
   });

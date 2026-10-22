@@ -60,7 +60,7 @@ describe("persistent project favicon cache", () => {
     {
       scope: "one machine",
       clear: (cache: ReturnType<typeof fixture>["cache"]) =>
-        cache.clearEnvironment(target.machineId),
+        cache.clearMachine(target.machineId),
       remaining: 1,
     },
     {

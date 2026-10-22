@@ -33,8 +33,8 @@ export type ThreadSnapshotLoadResult =
   | { readonly _tag: "missing" }
   | { readonly _tag: "unavailable" };
 
-export const fetchEnvironmentThreadSnapshot = Effect.fn(
-  "clientRuntime.state.fetchEnvironmentThreadSnapshot",
+export const fetchMachineThreadSnapshot = Effect.fn(
+  "clientRuntime.state.fetchMachineThreadSnapshot",
 )(function* (input: {
   readonly prepared: PreparedConnection;
   readonly threadId: ThreadId;
@@ -58,7 +58,7 @@ export const fetchEnvironmentThreadSnapshot = Effect.fn(
   });
 });
 
-export type FetchEnvironmentThreadSnapshotError = RemoteMachineRequestError;
+export type FetchMachineThreadSnapshotError = RemoteMachineRequestError;
 
 export class ThreadSnapshotLoader extends Context.Service<
   ThreadSnapshotLoader,

@@ -77,8 +77,8 @@ export class ConnectionRegistrationStore extends Context.Service<
   }
 >()("@vekrel/client-runtime/platform/persistence/ConnectionRegistrationStore") {}
 
-export class EnvironmentCacheStore extends Context.Service<
-  EnvironmentCacheStore,
+export class MachineCacheStore extends Context.Service<
+  MachineCacheStore,
   {
     readonly loadShell: (
       machineId: MachineId,
@@ -137,11 +137,11 @@ export class EnvironmentCacheStore extends Context.Service<
       machineId: MachineId,
     ) => Effect.Effect<void, ConnectionPersistenceError>;
   }
->()("@vekrel/client-runtime/platform/persistence/EnvironmentCacheStore") {}
+>()("@vekrel/client-runtime/platform/persistence/MachineCacheStore") {}
 
-export class EnvironmentOwnedDataCleanup extends Context.Reference<{
+export class MachineOwnedDataCleanup extends Context.Reference<{
   readonly clear: (machineId: MachineId) => Effect.Effect<void>;
-}>("@vekrel/client-runtime/platform/persistence/EnvironmentOwnedDataCleanup", {
+}>("@vekrel/client-runtime/platform/persistence/MachineOwnedDataCleanup", {
   defaultValue: () => ({
     clear: () => Effect.void,
   }),

@@ -26,16 +26,16 @@ import { AsyncResult, Atom } from "effect/reactivity";
 
 import {
   createAtomCommandScheduler,
-  createEnvironmentRpcCommand,
-  createEnvironmentQueryAtomFamily,
-  createEnvironmentRpcQueryAtomFamily,
-  createEnvironmentRpcSubscriptionAtomFamily,
-  createEnvironmentSubscriptionAtomFamily,
+  createMachineRpcCommand,
+  createMachineQueryAtomFamily,
+  createMachineRpcQueryAtomFamily,
+  createMachineRpcSubscriptionAtomFamily,
+  createMachineSubscriptionAtomFamily,
   createRuntimeCommand,
   scheduleAtomCommandEffect,
 } from "./runtime.ts";
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineRegistry from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
 import * as Persistence from "../platform/persistence.ts";
 import { runCachePersistence } from "./cachePersistence.ts";
@@ -45,10 +45,10 @@ import {
   runStream,
   subscribe,
   subscribeDynamicWithSession,
-  type EnvironmentRpcInput,
+  type MachineRpcInput,
 } from "../rpc/client.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import { followStreamInEnvironment } from "./runtime.ts";
+import { followStreamInMachine } from "./runtime.ts";
 import {
   applyServerConfigProjection,
   type ServerConfigProjection,
@@ -77,7 +77,7 @@ export type ServerUpdateState =
 
 export interface ServerUpdateTarget {
   readonly machineId: MachineId;
-  readonly input: EnvironmentRpcInput<typeof WS_METHODS.serverUpdateServer>;
+  readonly input: MachineRpcInput<typeof WS_METHODS.serverUpdateServer>;
 }
 
 const IDLE_SERVER_UPDATE_STATE: ServerUpdateState = { status: "idle" };
@@ -206,7 +206,7 @@ export function nudgeReconnectDuringUpdateRestart(input: {
   );
 }
 
-export function waitForNextEnvironmentReconnect<E>(
+export function waitForNextMachineReconnect<E>(
   stateChanges: Stream.Stream<{ readonly phase: string }, E>,
 ): Effect.Effect<void, E> {
   return stateChanges.pipe(
@@ -227,7 +227,7 @@ export const runDesktopCommitWithReconnectObserver = Effect.fn(
   const reconnected = yield* Deferred.make<void>();
   const observer = yield* stateChanges.pipe(
     Stream.tap(() => Deferred.succeed(armed, undefined)),
-    waitForNextEnvironmentReconnect,
+    waitForNextMachineReconnect,
     Effect.andThen(Deferred.succeed(reconnected, undefined)),
     Effect.forkChild,
   );
@@ -358,10 +358,10 @@ export interface ServerConfigSubscriptionOptions {
   readonly usageLimitsCommand?: boolean;
 }
 
-export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConfigState.make")(
+export const makeMachineServerConfigState = Effect.fn("MachineServerConfigState.make")(
   function* (subscription: ServerConfigSubscriptionOptions) {
-    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
-    const cache = yield* Persistence.EnvironmentCacheStore;
+    const supervisor = yield* MachineSupervisor.MachineSupervisor;
+    const cache = yield* Persistence.MachineCacheStore;
     const machineId = supervisor.target.machineId;
     const cachedConfig = yield* cache.loadServerConfig(machineId).pipe(
       Effect.catch((error) =>
@@ -384,7 +384,7 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
     const persistence = yield* Queue.sliding<ServerConfig>(1);
     const pendingPersistence = yield* Ref.make<Option.Option<ServerConfig>>(Option.none());
 
-    const persist = Effect.fn("EnvironmentServerConfigState.persist")(function* (
+    const persist = Effect.fn("MachineServerConfigState.persist")(function* (
       config: ServerConfig,
     ) {
       // A cached stall would read as a fresh freeze on the next launch.
@@ -403,7 +403,7 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
       );
     });
 
-    const persistPending = Effect.fn("EnvironmentServerConfigState.persistPending")(function* (
+    const persistPending = Effect.fn("MachineServerConfigState.persistPending")(function* (
       config: ServerConfig,
     ) {
       if (!(yield* persist(config))) {
@@ -454,10 +454,10 @@ function serverConfigStateChanges(
   machineId: MachineId,
   subscription: ServerConfigSubscriptionOptions,
 ) {
-  return followStreamInEnvironment(
+  return followStreamInMachine(
     machineId,
     Stream.unwrap(
-      makeEnvironmentServerConfigState(subscription).pipe(
+      makeMachineServerConfigState(subscription).pipe(
         Effect.map((state) =>
           SubscriptionRef.changes(state).pipe(
             Stream.filterMap((projection) =>
@@ -474,13 +474,13 @@ function serverConfigStateChanges(
 }
 
 export function applyServerWelcomeEvent(
-  current: EnvironmentServerWelcomeState,
+  current: MachineServerWelcomeState,
   session: RpcSession,
   event: {
     readonly type: "welcome" | "ready" | "legacyThreadMigration";
     readonly payload: unknown;
   },
-): EnvironmentServerWelcomeState {
+): MachineServerWelcomeState {
   return event.type === "welcome" && current.currentSession === session
     ? {
         ...current,
@@ -490,35 +490,35 @@ export function applyServerWelcomeEvent(
     : current;
 }
 
-export interface EnvironmentServerWelcomeState {
+export interface MachineServerWelcomeState {
   readonly currentSession: RpcSession | null;
   readonly welcomeSession: RpcSession | null;
   readonly welcome: ServerLifecycleWelcomePayload | null;
 }
 
 export function resolveServerWelcomeState(
-  state: EnvironmentServerWelcomeState,
+  state: MachineServerWelcomeState,
 ): ServerLifecycleWelcomePayload | null {
   return state.currentSession === state.welcomeSession ? state.welcome : null;
 }
 
-export const makeEnvironmentServerWelcomeState = Effect.fn("EnvironmentServerWelcomeState.make")(
+export const makeMachineServerWelcomeState = Effect.fn("MachineServerWelcomeState.make")(
   function* () {
-    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const supervisor = yield* MachineSupervisor.MachineSupervisor;
     const initialSession = Option.getOrNull(yield* SubscriptionRef.get(supervisor.session));
-    const state = yield* SubscriptionRef.make<EnvironmentServerWelcomeState>({
+    const state = yield* SubscriptionRef.make<MachineServerWelcomeState>({
       currentSession: initialSession,
       welcomeSession: null,
       welcome: null,
     });
 
     const updateWithCurrentSession = Effect.fn(
-      "EnvironmentServerWelcomeState.updateWithCurrentSession",
+      "MachineServerWelcomeState.updateWithCurrentSession",
     )(function* (
       update: (
-        current: EnvironmentServerWelcomeState,
+        current: MachineServerWelcomeState,
         currentSession: RpcSession | null,
-      ) => EnvironmentServerWelcomeState,
+      ) => MachineServerWelcomeState,
     ) {
       return yield* SubscriptionRef.modifyEffect(state, (current) =>
         SubscriptionRef.get(supervisor.session).pipe(
@@ -542,7 +542,7 @@ export const makeEnvironmentServerWelcomeState = Effect.fn("EnvironmentServerWel
 
     yield* subscribeDynamicWithSession(
       WS_METHODS.subscribeServerLifecycle,
-      Effect.fn("EnvironmentServerWelcomeState.makeSubscribeInput")(function* (session) {
+      Effect.fn("MachineServerWelcomeState.makeSubscribeInput")(function* (session) {
         yield* updateWithCurrentSession((current, currentSession) =>
           currentSession === session
             ? {
@@ -576,10 +576,10 @@ export const makeEnvironmentServerWelcomeState = Effect.fn("EnvironmentServerWel
 );
 
 function serverWelcomeStateChanges(machineId: MachineId) {
-  return followStreamInEnvironment(
+  return followStreamInMachine(
     machineId,
     Stream.unwrap(
-      makeEnvironmentServerWelcomeState().pipe(
+      makeMachineServerWelcomeState().pipe(
         Effect.map((state) =>
           SubscriptionRef.changes(state).pipe(Stream.map(resolveServerWelcomeState)),
         ),
@@ -604,7 +604,7 @@ export function resolveServerConfigValue(
 
 export function createServerMachineAtoms<R, E>(
   runtime: Atom.AtomRuntime<
-    EnvironmentRegistry.EnvironmentRegistry | Persistence.EnvironmentCacheStore | R,
+    MachineRegistry.MachineRegistry | Persistence.MachineCacheStore | R,
     E
   >,
   options: {
@@ -638,7 +638,7 @@ export function createServerMachineAtoms<R, E>(
   );
   const configProjection = (target: {
     readonly machineId: MachineId;
-    readonly input: EnvironmentRpcInput<typeof WS_METHODS.subscribeServerConfig>;
+    readonly input: MachineRpcInput<typeof WS_METHODS.subscribeServerConfig>;
   }) => configProjectionFamily(target.machineId);
   const emptyConfigAtom = Atom.make<ServerConfig | null>(null).pipe(
     Atom.withLabel("machine-data:server:config:empty"),
@@ -668,7 +668,7 @@ export function createServerMachineAtoms<R, E>(
   const updateStateAtom = (machineId: MachineId | null) =>
     machineId === null ? EMPTY_SERVER_UPDATE_STATE_ATOM : updateStateValueAtom(machineId);
   const updateServer = createRuntimeCommand<
-    EnvironmentRegistry.EnvironmentRegistry | Persistence.EnvironmentCacheStore | R,
+    MachineRegistry.MachineRegistry | Persistence.MachineCacheStore | R,
     E,
     ServerUpdateTarget,
     ServerSelfUpdateResult,
@@ -693,13 +693,13 @@ export function createServerMachineAtoms<R, E>(
       });
 
       return Effect.gen(function* () {
-        const environmentRegistry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const machineRegistry = yield* MachineRegistry.MachineRegistry;
         const desktopCommitStarting = yield* Deferred.make<void>();
         const desktopReconnectObserverArmed = yield* Deferred.make<void>();
         const desktopReconnected = yield* Deferred.make<void>();
         yield* Deferred.await(desktopCommitStarting).pipe(
           Effect.andThen(
-            environmentRegistry.stateChanges(target.machineId).pipe(
+            machineRegistry.stateChanges(target.machineId).pipe(
               Stream.tap(() => Deferred.succeed(desktopReconnectObserverArmed, undefined)),
               Stream.dropWhile((state) => state.phase === "connected"),
               Stream.filter((state) => state.phase === "connected"),
@@ -731,7 +731,7 @@ export function createServerMachineAtoms<R, E>(
                   const terminal = yield* Ref.make<Option.Option<ServerSelfUpdateResult>>(
                     Option.none(),
                   );
-                  const streamExit = yield* environmentRegistry
+                  const streamExit = yield* machineRegistry
                     .runStream(
                       target.machineId,
                       runStream(WS_METHODS.serverUpdateServerWithProgress, target.input),
@@ -764,7 +764,7 @@ export function createServerMachineAtoms<R, E>(
                 })
               : yield* Effect.gen(function* () {
                   const selfUpdateMethod = currentConfig?.machine.capabilities.serverSelfUpdate;
-                  const exit = yield* environmentRegistry
+                  const exit = yield* machineRegistry
                     .run(target.machineId, request(WS_METHODS.serverUpdateServer, target.input))
                     .pipe(Effect.exit);
                   if (Exit.isSuccess(exit)) {
@@ -788,7 +788,7 @@ export function createServerMachineAtoms<R, E>(
             ) {
               yield* Deferred.succeed(desktopCommitStarting, undefined);
               yield* Deferred.await(desktopReconnectObserverArmed);
-              const commitExit = yield* environmentRegistry
+              const commitExit = yield* machineRegistry
                 .run(
                   target.machineId,
                   request(WS_METHODS.serverCommitDesktopUpdate, {
@@ -816,8 +816,8 @@ export function createServerMachineAtoms<R, E>(
         );
 
         yield* nudgeReconnectDuringUpdateRestart({
-          stateChanges: environmentRegistry.stateChanges(target.machineId),
-          retryNow: environmentRegistry.retryNow(target.machineId),
+          stateChanges: machineRegistry.stateChanges(target.machineId),
+          retryNow: machineRegistry.retryNow(target.machineId),
         }).pipe(Effect.forkChild);
 
         if (result.method === "desktop-app" && desktopCommitLostTransport) {
@@ -826,7 +826,7 @@ export function createServerMachineAtoms<R, E>(
           );
         }
 
-        const waitForReady = environmentRegistry
+        const waitForReady = machineRegistry
           .followStream(target.machineId, subscribe(WS_METHODS.subscribeServerLifecycle, {}))
           .pipe(
             Stream.filter(
@@ -856,8 +856,8 @@ export function createServerMachineAtoms<R, E>(
                 result.targetVersion,
                 nextReady,
                 runDesktopCommitWithReconnectObserver(
-                  environmentRegistry.stateChanges(target.machineId),
-                  environmentRegistry
+                  machineRegistry.stateChanges(target.machineId),
+                  machineRegistry
                     .run(
                       target.machineId,
                       request(WS_METHODS.serverCommitDesktopUpdate, {
@@ -955,7 +955,7 @@ export function createServerMachineAtoms<R, E>(
         : AsyncResult.success(result.value, result);
     }).pipe(Atom.withLabel(`machine-data:server:welcome:${machineId}`)),
   );
-  const databaseStorage = createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+  const databaseStorage = createMachineRpcSubscriptionAtomFamily(runtime, {
     label: "machine-data:server:database-storage",
     tag: WS_METHODS.serverGetDatabaseStorage,
     idleTtlMs: 0,
@@ -985,9 +985,9 @@ export function createServerMachineAtoms<R, E>(
   });
   const welcome = (target: {
     readonly machineId: MachineId;
-    readonly input: EnvironmentRpcInput<typeof WS_METHODS.subscribeServerLifecycle>;
+    readonly input: MachineRpcInput<typeof WS_METHODS.subscribeServerLifecycle>;
   }) => welcomeFamily(target.machineId);
-  const updateSettings = createEnvironmentRpcCommand(runtime, {
+  const updateSettings = createMachineRpcCommand(runtime, {
     label: "machine-data:server:update-settings",
     tag: WS_METHODS.serverUpdateSettings,
     scheduler: configScheduler,
@@ -996,14 +996,14 @@ export function createServerMachineAtoms<R, E>(
 
   return {
     configValueAtom,
-    runStorageCleanup: createEnvironmentRpcCommand(runtime, {
+    runStorageCleanup: createMachineRpcCommand(runtime, {
       label: "machine-data:server:run-storage-cleanup",
       tag: WS_METHODS.serverRunStorageCleanup,
       concurrency: { mode: "singleFlight", key: ({ machineId }) => machineId },
     }),
     databaseStorage,
     databaseCompactionRecommendations,
-    storageCleanupReport: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    storageCleanupReport: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:server:storage-cleanup-report",
       tag: WS_METHODS.serverGetStorageCleanupReport,
       idleTtlMs: 0,
@@ -1011,12 +1011,12 @@ export function createServerMachineAtoms<R, E>(
     updateStateAtom,
     settingsValueAtom,
     providersValueAtom,
-    providerAuthState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    providerAuthState: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:provider:auth-state",
       tag: WS_METHODS.providerAuthSubscribe,
       idleTtlMs: 0,
     }),
-    startProviderAuth: createEnvironmentRpcCommand(runtime, {
+    startProviderAuth: createMachineRpcCommand(runtime, {
       label: "machine-data:provider:auth-start",
       tag: WS_METHODS.providerAuthStart,
       concurrency: {
@@ -1024,49 +1024,49 @@ export function createServerMachineAtoms<R, E>(
         key: ({ machineId, input }) => JSON.stringify([machineId, input]),
       },
     }),
-    respondProviderAuth: createEnvironmentRpcCommand(runtime, {
+    respondProviderAuth: createMachineRpcCommand(runtime, {
       label: "machine-data:provider:auth-respond",
       tag: WS_METHODS.providerAuthRespond,
     }),
-    completeProviderAuth: createEnvironmentRpcCommand(runtime, {
+    completeProviderAuth: createMachineRpcCommand(runtime, {
       label: "machine-data:provider:auth-complete",
       tag: WS_METHODS.providerAuthComplete,
     }),
-    chatGptReconnectProfile: createEnvironmentRpcCommand(runtime, {
+    chatGptReconnectProfile: createMachineRpcCommand(runtime, {
       label: "machine-data:chatgpt:reconnect-profile",
       tag: WS_METHODS.chatGptReconnectProfile,
     }),
-    chatGptImportProfile: createEnvironmentRpcCommand(runtime, {
+    chatGptImportProfile: createMachineRpcCommand(runtime, {
       label: "machine-data:chatgpt:import-profile",
       tag: WS_METHODS.chatGptImportProfile,
     }),
-    chatGptHandoffState: createEnvironmentSubscriptionAtomFamily(runtime, {
+    chatGptHandoffState: createMachineSubscriptionAtomFamily(runtime, {
       label: "machine-data:chatgpt:handoff",
       sensitiveInput: true,
       // OAuth must not be replayed when the connection recovers.
-      subscribe: (input: EnvironmentRpcInput<typeof WS_METHODS.chatGptHandoffSubscribe>) =>
+      subscribe: (input: MachineRpcInput<typeof WS_METHODS.chatGptHandoffSubscribe>) =>
         runStream(WS_METHODS.chatGptHandoffSubscribe, input),
       idleTtlMs: 0,
     }),
-    codexAuthCallbackState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    codexAuthCallbackState: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:codex:auth-callback",
       tag: WS_METHODS.codexAuthCallbackSubscribe,
       idleTtlMs: 0,
     }),
-    cancelProviderAuth: createEnvironmentRpcCommand(runtime, {
+    cancelProviderAuth: createMachineRpcCommand(runtime, {
       label: "machine-data:provider:auth-cancel",
       tag: WS_METHODS.providerAuthCancel,
     }),
-    logoutProviderAuth: createEnvironmentRpcCommand(runtime, {
+    logoutProviderAuth: createMachineRpcCommand(runtime, {
       label: "machine-data:provider:auth-logout",
       tag: WS_METHODS.providerAuthLogout,
     }),
-    providerInstallState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    providerInstallState: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:provider:install-state",
       tag: WS_METHODS.providerInstallSubscribe,
       idleTtlMs: 0,
     }),
-    startProviderInstall: createEnvironmentRpcCommand(runtime, {
+    startProviderInstall: createMachineRpcCommand(runtime, {
       label: "machine-data:provider:install-start",
       tag: WS_METHODS.providerInstallStart,
       concurrency: {
@@ -1074,48 +1074,48 @@ export function createServerMachineAtoms<R, E>(
         key: ({ machineId }) => machineId,
       },
     }),
-    cancelProviderInstall: createEnvironmentRpcCommand(runtime, {
+    cancelProviderInstall: createMachineRpcCommand(runtime, {
       label: "machine-data:provider:install-cancel",
       tag: WS_METHODS.providerInstallCancel,
     }),
-    removeProviderInstallation: createEnvironmentRpcCommand(runtime, {
+    removeProviderInstallation: createMachineRpcCommand(runtime, {
       label: "machine-data:provider:install-remove",
       tag: WS_METHODS.providerInstallRemove,
     }),
-    traceDiagnostics: createEnvironmentRpcQueryAtomFamily(runtime, {
+    traceDiagnostics: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:server:trace-diagnostics",
       tag: WS_METHODS.serverGetTraceDiagnostics,
     }),
-    processDiagnostics: createEnvironmentRpcQueryAtomFamily(runtime, {
+    processDiagnostics: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:server:process-diagnostics",
       tag: WS_METHODS.serverGetProcessDiagnostics,
     }),
-    hostResources: createEnvironmentQueryAtomFamily(runtime, {
+    hostResources: createMachineQueryAtomFamily(runtime, {
       label: "machine-data:server:host-resources",
       idleTtlMs: 0,
       staleTimeMs: 5_000,
-      execute: (input: EnvironmentRpcInput<typeof WS_METHODS.serverGetHostResources>) =>
+      execute: (input: MachineRpcInput<typeof WS_METHODS.serverGetHostResources>) =>
         request(WS_METHODS.serverGetHostResources, input).pipe(Effect.timeout("5 seconds")),
     }),
-    processResourceHistory: createEnvironmentRpcQueryAtomFamily(runtime, {
+    processResourceHistory: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:server:process-resource-history",
       tag: WS_METHODS.serverGetProcessResourceHistory,
     }),
-    scheduledTaskWebhookDeliveries: createEnvironmentRpcQueryAtomFamily(runtime, {
+    scheduledTaskWebhookDeliveries: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:server:scheduled-task:webhook-deliveries",
       tag: WS_METHODS.scheduledTasksListWebhookDeliveries,
     }),
-    scheduledTaskWebhookDelivery: createEnvironmentRpcQueryAtomFamily(runtime, {
+    scheduledTaskWebhookDelivery: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:server:scheduled-task:webhook-delivery",
       tag: WS_METHODS.scheduledTasksGetWebhookDelivery,
     }),
-    scheduledTasksLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    scheduledTasksLive: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:server:scheduled-tasks:live",
       tag: WS_METHODS.scheduledTasksSubscribe,
     }),
     // A cold transcript scan is measured in seconds, so keep the result around
     // long enough that switching windows or re-rendering does not rescan.
-    usageSummary: createEnvironmentRpcQueryAtomFamily(runtime, {
+    usageSummary: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:server:usage-summary",
       tag: WS_METHODS.serverGetUsageSummary,
       staleTimeMs: 60_000,
@@ -1139,17 +1139,17 @@ export function createServerMachineAtoms<R, E>(
           ),
         ),
     }),
-    resourceTelemetry: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    resourceTelemetry: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:server:resource-telemetry",
       tag: WS_METHODS.subscribeResourceTelemetry,
       idleTtlMs: 0,
     }),
-    resourceTelemetryHistory: createEnvironmentRpcQueryAtomFamily(runtime, {
+    resourceTelemetryHistory: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:server:resource-telemetry-history",
       tag: WS_METHODS.serverGetResourceTelemetryHistory,
       staleTimeMs: 5_000,
     }),
-    searchAcpRegistry: createEnvironmentRpcQueryAtomFamily(runtime, {
+    searchAcpRegistry: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:server:acp-registry:search",
       tag: WS_METHODS.serverSearchAcpRegistry,
       staleTimeMs: 0,
@@ -1157,7 +1157,7 @@ export function createServerMachineAtoms<R, E>(
     }),
     configProjection,
     welcome,
-    legacyThreadMigration: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    legacyThreadMigration: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:server:legacy-thread-migration",
       tag: WS_METHODS.subscribeServerLifecycle,
       transform: (stream) =>
@@ -1169,7 +1169,7 @@ export function createServerMachineAtoms<R, E>(
           ),
         ),
     }),
-    consumeResetCredit: createEnvironmentRpcCommand(runtime, {
+    consumeResetCredit: createMachineRpcCommand(runtime, {
       label: "machine-data:server:consume-reset-credit",
       tag: WS_METHODS.providerConsumeResetCredit,
       concurrency: {
@@ -1178,7 +1178,7 @@ export function createServerMachineAtoms<R, E>(
         key: ({ machineId, input }) => JSON.stringify([machineId, input]),
       },
     }),
-    refreshProviders: createEnvironmentRpcCommand(runtime, {
+    refreshProviders: createMachineRpcCommand(runtime, {
       label: "machine-data:server:refresh-providers",
       tag: WS_METHODS.serverRefreshProviders,
       concurrency: {
@@ -1193,20 +1193,20 @@ export function createServerMachineAtoms<R, E>(
           ]),
       },
     }),
-    updateProvider: createEnvironmentRpcCommand(runtime, {
+    updateProvider: createMachineRpcCommand(runtime, {
       label: "machine-data:server:update-provider",
       tag: WS_METHODS.serverUpdateProvider,
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
     updateServer,
-    upsertKeybinding: createEnvironmentRpcCommand(runtime, {
+    upsertKeybinding: createMachineRpcCommand(runtime, {
       label: "machine-data:server:upsert-keybinding",
       tag: WS_METHODS.serverUpsertKeybinding,
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
-    removeKeybinding: createEnvironmentRpcCommand(runtime, {
+    removeKeybinding: createMachineRpcCommand(runtime, {
       label: "machine-data:server:remove-keybinding",
       tag: WS_METHODS.serverRemoveKeybinding,
       scheduler: configScheduler,
@@ -1214,7 +1214,7 @@ export function createServerMachineAtoms<R, E>(
     }),
     updateSettings,
     mutateProviderInstance: updateSettings,
-    prepareAcpRegistryAgent: createEnvironmentRpcCommand(runtime, {
+    prepareAcpRegistryAgent: createMachineRpcCommand(runtime, {
       label: "machine-data:server:acp-registry:prepare",
       tag: WS_METHODS.serverPrepareAcpRegistryAgent,
       concurrency: {
@@ -1222,7 +1222,7 @@ export function createServerMachineAtoms<R, E>(
         key: ({ machineId, input }) => `${machineId}:${input.agentId}`,
       },
     }),
-    uninstallAcpRegistryManagedBinary: createEnvironmentRpcCommand(runtime, {
+    uninstallAcpRegistryManagedBinary: createMachineRpcCommand(runtime, {
       label: "machine-data:server:acp-registry:uninstall-managed-binary",
       tag: WS_METHODS.serverUninstallAcpRegistryManagedBinary,
       concurrency: {
@@ -1230,7 +1230,7 @@ export function createServerMachineAtoms<R, E>(
         key: ({ machineId, input }) => `${machineId}:${input.agentId}`,
       },
     }),
-    acceptAcpRegistryUrlAuth: createEnvironmentRpcCommand(runtime, {
+    acceptAcpRegistryUrlAuth: createMachineRpcCommand(runtime, {
       label: "machine-data:server:acp-registry:accept-url-auth",
       tag: WS_METHODS.serverAcceptAcpRegistryUrlAuth,
       concurrency: {
@@ -1239,7 +1239,7 @@ export function createServerMachineAtoms<R, E>(
           `${machineId}:${input.instanceId}:${input.elicitationId}`,
       },
     }),
-    listAcpRegistrySessions: createEnvironmentRpcCommand(runtime, {
+    listAcpRegistrySessions: createMachineRpcCommand(runtime, {
       label: "machine-data:server:acp-registry:list-sessions",
       tag: WS_METHODS.serverListAcpRegistrySessions,
       concurrency: {
@@ -1248,7 +1248,7 @@ export function createServerMachineAtoms<R, E>(
           `${machineId}:${input.instanceId}:${input.projectId}:${input.cursor ?? "first"}`,
       },
     }),
-    importAcpRegistrySession: createEnvironmentRpcCommand(runtime, {
+    importAcpRegistrySession: createMachineRpcCommand(runtime, {
       label: "machine-data:server:acp-registry:import-session",
       tag: WS_METHODS.serverImportAcpRegistrySession,
       concurrency: {
@@ -1257,7 +1257,7 @@ export function createServerMachineAtoms<R, E>(
           `${machineId}:${input.instanceId}:${input.projectId}:${input.sessionId}`,
       },
     }),
-    deleteAcpRegistrySession: createEnvironmentRpcCommand(runtime, {
+    deleteAcpRegistrySession: createMachineRpcCommand(runtime, {
       label: "machine-data:server:acp-registry:delete-session",
       tag: WS_METHODS.serverDeleteAcpRegistrySession,
       concurrency: {
@@ -1266,7 +1266,7 @@ export function createServerMachineAtoms<R, E>(
           `${machineId}:${input.instanceId}:${input.projectId}:${input.sessionId}`,
       },
     }),
-    listAcpRegistryProviders: createEnvironmentRpcCommand(runtime, {
+    listAcpRegistryProviders: createMachineRpcCommand(runtime, {
       label: "machine-data:server:acp-registry:list-providers",
       tag: WS_METHODS.serverListAcpRegistryProviders,
       concurrency: {
@@ -1275,7 +1275,7 @@ export function createServerMachineAtoms<R, E>(
           `${machineId}:${input.instanceId}:${input.projectId}`,
       },
     }),
-    setAcpRegistryProvider: createEnvironmentRpcCommand(runtime, {
+    setAcpRegistryProvider: createMachineRpcCommand(runtime, {
       label: "machine-data:server:acp-registry:set-provider",
       tag: WS_METHODS.serverSetAcpRegistryProvider,
       concurrency: {
@@ -1284,7 +1284,7 @@ export function createServerMachineAtoms<R, E>(
           `${machineId}:${input.instanceId}:${input.projectId}:${input.providerId}`,
       },
     }),
-    disableAcpRegistryProvider: createEnvironmentRpcCommand(runtime, {
+    disableAcpRegistryProvider: createMachineRpcCommand(runtime, {
       label: "machine-data:server:acp-registry:disable-provider",
       tag: WS_METHODS.serverDisableAcpRegistryProvider,
       concurrency: {
@@ -1293,7 +1293,7 @@ export function createServerMachineAtoms<R, E>(
           `${machineId}:${input.instanceId}:${input.projectId}:${input.providerId}`,
       },
     }),
-    logoutAcpRegistry: createEnvironmentRpcCommand(runtime, {
+    logoutAcpRegistry: createMachineRpcCommand(runtime, {
       label: "machine-data:server:acp-registry:logout",
       tag: WS_METHODS.serverLogoutAcpRegistry,
       concurrency: {
@@ -1301,23 +1301,23 @@ export function createServerMachineAtoms<R, E>(
         key: ({ machineId, input }) => `${machineId}:${input.instanceId}`,
       },
     }),
-    signalProcess: createEnvironmentRpcCommand(runtime, {
+    signalProcess: createMachineRpcCommand(runtime, {
       label: "machine-data:server:signal-process",
       tag: WS_METHODS.serverSignalProcess,
     }),
-    upsertScheduledTask: createEnvironmentRpcCommand(runtime, {
+    upsertScheduledTask: createMachineRpcCommand(runtime, {
       label: "machine-data:server:scheduled-task:upsert",
       tag: WS_METHODS.scheduledTasksUpsert,
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
-    setScheduledTaskEnabled: createEnvironmentRpcCommand(runtime, {
+    setScheduledTaskEnabled: createMachineRpcCommand(runtime, {
       label: "machine-data:server:scheduled-task:set-enabled",
       tag: WS_METHODS.scheduledTasksSetEnabled,
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
-    deleteScheduledTask: createEnvironmentRpcCommand(runtime, {
+    deleteScheduledTask: createMachineRpcCommand(runtime, {
       label: "machine-data:server:scheduled-task:delete",
       tag: WS_METHODS.scheduledTasksDelete,
       scheduler: configScheduler,
@@ -1326,11 +1326,11 @@ export function createServerMachineAtoms<R, E>(
     // Deliberately not on the config lane: run-now blocks until the run is
     // dispatched, and a slow run must not stall settings/keybinding/provider
     // mutations (or other scheduled-task edits) queued behind it.
-    runScheduledTaskNow: createEnvironmentRpcCommand(runtime, {
+    runScheduledTaskNow: createMachineRpcCommand(runtime, {
       label: "machine-data:server:scheduled-task:run-now",
       tag: WS_METHODS.scheduledTasksRunNow,
     }),
-    rotateScheduledTaskWebhookToken: createEnvironmentRpcCommand(runtime, {
+    rotateScheduledTaskWebhookToken: createMachineRpcCommand(runtime, {
       label: "machine-data:server:scheduled-task:rotate-webhook-token",
       tag: WS_METHODS.scheduledTasksRotateWebhookToken,
       scheduler: configScheduler,
@@ -1338,7 +1338,7 @@ export function createServerMachineAtoms<R, E>(
     }),
     // Off the config lane: answering a card must not queue behind settings
     // edits. One answer per card at a time.
-    answerSecretRequest: createEnvironmentRpcCommand(runtime, {
+    answerSecretRequest: createMachineRpcCommand(runtime, {
       label: "machine-data:server:secrets:answer-request",
       tag: WS_METHODS.secretsAnswerRequest,
       concurrency: {
@@ -1347,7 +1347,7 @@ export function createServerMachineAtoms<R, E>(
           JSON.stringify([machineId, input.threadId, input.turnItemId]),
       },
     }),
-    refreshUsageRates: createEnvironmentRpcCommand(runtime, {
+    refreshUsageRates: createMachineRpcCommand(runtime, {
       label: "machine-data:server:refresh-usage-rates",
       tag: WS_METHODS.serverRefreshUsageRates,
       concurrency: {
@@ -1355,11 +1355,11 @@ export function createServerMachineAtoms<R, E>(
         key: ({ machineId }) => machineId,
       },
     }),
-    checkOtlpEndpoint: createEnvironmentRpcCommand(runtime, {
+    checkOtlpEndpoint: createMachineRpcCommand(runtime, {
       label: "machine-data:server:check-otlp-endpoint",
       tag: WS_METHODS.serverCheckOtlpEndpoint,
     }),
-    retryResourceTelemetry: createEnvironmentRpcCommand(runtime, {
+    retryResourceTelemetry: createMachineRpcCommand(runtime, {
       label: "machine-data:server:retry-resource-telemetry",
       tag: WS_METHODS.serverRetryResourceTelemetry,
       concurrency: {

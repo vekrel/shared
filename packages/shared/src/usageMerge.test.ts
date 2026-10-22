@@ -10,7 +10,7 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
-import { isModelCostUnknown, mergeUsage, type EnvironmentUsage } from "./usageMerge.ts";
+import { isModelCostUnknown, mergeUsage, type MachineUsage } from "./usageMerge.ts";
 
 const decodeSummary = Schema.decodeUnknownSync(UsageSummary);
 
@@ -73,7 +73,7 @@ function summary(
   };
 }
 
-function machine(id: string, usageSummary: UsageSummary): EnvironmentUsage {
+function machine(id: string, usageSummary: UsageSummary): MachineUsage {
   return { machineId: id as MachineId, label: id, summary: usageSummary };
 }
 
@@ -127,7 +127,7 @@ describe("mergeUsage", () => {
     expect(merged.records).toBe(5);
     expect(merged.sessions).toBe(1);
     expect(merged.duplicateSources).toHaveLength(1);
-    expect(merged.contributingEnvironments).toEqual(["env-a"]);
+    expect(merged.contributingMachines).toEqual(["env-a"]);
   });
 
   it("drops only the duplicated provider, keeping the machine's other one", () => {
@@ -203,7 +203,7 @@ describe("mergeUsage", () => {
       expect(merged.costUsd).toBe(10);
       expect(merged.records).toBe(5);
       expect(merged.sessions).toBe(1);
-      expect(merged.contributingEnvironments).toEqual(["env-b"]);
+      expect(merged.contributingMachines).toEqual(["env-b"]);
       expect(merged.duplicateSources).toEqual(["env-a: /home/theo/.claude"]);
     }
   });
@@ -224,7 +224,7 @@ describe("mergeUsage", () => {
     ]) {
       const merged = mergeUsage(ordered, USAGE_CONTRACT_VERSION);
       expect(merged.costUsd).toBe(10);
-      expect(merged.contributingEnvironments).toEqual(["old"]);
+      expect(merged.contributingMachines).toEqual(["old"]);
       expect(merged.duplicateSources).toEqual(["new: /home/theo/.claude"]);
     }
     expect(mergeUsage([partial], USAGE_CONTRACT_VERSION).costUsd).toBe(4);
@@ -266,7 +266,7 @@ describe("mergeUsage", () => {
         ["2026-08-07", 10],
         ["2026-08-08", 3],
       ]);
-      expect(merged.contributingEnvironments).toEqual(
+      expect(merged.contributingMachines).toEqual(
         ordered.map(({ machineId }) => machineId),
       );
       expect(merged.duplicateSources).toEqual(["new: /home/theo/.claude"]);
@@ -303,7 +303,7 @@ describe("mergeUsage", () => {
     expect(merged.totalTokens).toBe(1160);
     expect(merged.records).toBe(5);
     expect(merged.sessions).toBe(1);
-    expect(merged.contributingEnvironments).toEqual(["old"]);
+    expect(merged.contributingMachines).toEqual(["old"]);
   });
 
   it("identifies a machine reporting an older contract version", () => {

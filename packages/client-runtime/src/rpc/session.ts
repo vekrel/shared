@@ -41,7 +41,7 @@ import {
   type ServerConfigProjection,
   withoutMachineThemes,
 } from "../state/serverConfigProjection.ts";
-import { environmentMismatchError } from "../connection/errors.ts";
+import { machineMismatchError } from "../connection/errors.ts";
 
 const SOCKET_OPEN_TIMEOUT = "15 seconds";
 
@@ -321,7 +321,7 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
       Effect.filterOrElse(
         (config) => config.machine.machineId === connection.machineId,
         (config) =>
-          environmentMismatchError({
+          machineMismatchError({
             expected: connection.machineId,
             actual: config.machine.machineId,
           }),

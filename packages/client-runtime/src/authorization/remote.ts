@@ -10,7 +10,7 @@ import { encodeOAuthScope } from "@vekrel/shared/oauthScope";
 import { hashTelemetryId } from "@vekrel/shared/telemetryId";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { environmentEndpointUrl } from "../machine/endpoint.ts";
+import { machineEndpointUrl } from "../machine/endpoint.ts";
 import * as ClientCapabilities from "../platform/capabilities.ts";
 import {
   executeMachineHttpRequest,
@@ -119,7 +119,7 @@ export const exchangeRemoteDpopAccessToken = Effect.fn(
 }) {
   const client = yield* makeMachineHttpApiGroupClient(input.httpBaseUrl, "auth");
   const response = yield* executeMachineHttpRequest(
-    environmentEndpointUrl(input.httpBaseUrl, "/oauth/token"),
+    machineEndpointUrl(input.httpBaseUrl, "/oauth/token"),
     input.timeoutMs ?? DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
     client.token({
       headers: { dpop: input.dpopProof },
@@ -147,7 +147,7 @@ export const bootstrapRemoteBearerSession = Effect.fn(
 }) {
   const client = yield* makeMachineHttpApiGroupClient(input.httpBaseUrl, "auth");
   return yield* executeMachineHttpRequest(
-    environmentEndpointUrl(input.httpBaseUrl, "/oauth/token"),
+    machineEndpointUrl(input.httpBaseUrl, "/oauth/token"),
     input.timeoutMs ?? DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
     client.token({
       headers: {},
@@ -172,7 +172,7 @@ export const fetchRemoteSessionState = Effect.fn(
 }) {
   const client = yield* makeMachineHttpApiGroupClient(input.httpBaseUrl, "auth");
   return yield* executeMachineHttpRequest(
-    environmentEndpointUrl(input.httpBaseUrl, "/api/auth/session"),
+    machineEndpointUrl(input.httpBaseUrl, "/api/auth/session"),
     input.timeoutMs ?? DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
     client.session({
       headers: {
@@ -191,7 +191,7 @@ export const issueRemoteWebSocketTicket = Effect.fn(
 }) {
   const client = yield* makeMachineHttpApiGroupClient(input.httpBaseUrl, "auth");
   return yield* executeMachineHttpRequest(
-    environmentEndpointUrl(input.httpBaseUrl, "/api/auth/websocket-ticket"),
+    machineEndpointUrl(input.httpBaseUrl, "/api/auth/websocket-ticket"),
     input.timeoutMs ?? DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
     client.webSocketTicket({
       headers: {
@@ -211,7 +211,7 @@ export const issueRemoteDpopWebSocketTicket = Effect.fn(
 }) {
   const client = yield* makeMachineHttpApiGroupClient(input.httpBaseUrl, "auth");
   return yield* executeMachineHttpRequest(
-    environmentEndpointUrl(input.httpBaseUrl, "/api/auth/websocket-ticket"),
+    machineEndpointUrl(input.httpBaseUrl, "/api/auth/websocket-ticket"),
     input.timeoutMs ?? DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
     client.webSocketTicket({
       headers: {

@@ -1,5 +1,5 @@
 import type {
-  RelayClientEnvironmentRecord,
+  RelayClientMachineRecord,
   RelayMachineStatusResponse,
 } from "@vekrel/contracts/relay";
 import { decodeRelayJwt } from "@vekrel/shared/relayJwt";
@@ -25,15 +25,15 @@ import * as ConnectionWakeups from "../connection/wakeups.ts";
 
 export type RelayMachineAvailability = "checking" | "online" | "offline" | "error";
 
-export interface RelayDiscoveredEnvironment {
-  readonly machine: RelayClientEnvironmentRecord;
+export interface RelayDiscoveredMachine {
+  readonly machine: RelayClientMachineRecord;
   readonly availability: RelayMachineAvailability;
   readonly status: Option.Option<RelayMachineStatusResponse>;
   readonly error: Option.Option<ConnectionAttemptError>;
 }
 
 export interface RelayMachineDiscoveryState {
-  readonly machines: ReadonlyMap<string, RelayDiscoveredEnvironment>;
+  readonly machines: ReadonlyMap<string, RelayDiscoveredMachine>;
   readonly refreshing: boolean;
   readonly offline: boolean;
   readonly error: Option.Option<ConnectionAttemptError>;
@@ -55,7 +55,7 @@ export const EMPTY_RELAY_MACHINE_DISCOVERY_STATE: RelayMachineDiscoveryState = {
 };
 
 function validateStatus(
-  machine: RelayClientEnvironmentRecord,
+  machine: RelayClientMachineRecord,
   status: RelayMachineStatusResponse,
 ): Effect.Effect<RelayMachineStatusResponse, ConnectionAttemptError> {
   if (status.machineId !== machine.machineId) {
@@ -129,10 +129,10 @@ export const make = Effect.fn("RelayMachineDiscovery.make")(function* () {
     });
   });
 
-  const updateEnvironment = Effect.fn("RelayMachineDiscovery.updateEnvironment")(function* (
+  const updateMachine = Effect.fn("RelayMachineDiscovery.updateMachine")(function* (
     generation: number,
     machineId: string,
-    update: (current: RelayDiscoveredEnvironment) => RelayDiscoveredEnvironment,
+    update: (current: RelayDiscoveredMachine) => RelayDiscoveredMachine,
   ) {
     if ((yield* Ref.get(accountGeneration)) !== generation) {
       return;
@@ -151,7 +151,7 @@ export const make = Effect.fn("RelayMachineDiscovery.make")(function* () {
   const refreshStatus = Effect.fn("RelayMachineDiscovery.refreshStatus")(function* (
     generation: number,
     clerkToken: string,
-    machine: RelayClientEnvironmentRecord,
+    machine: RelayClientMachineRecord,
   ) {
     const result = yield* relay
       .getMachineStatus({
@@ -185,7 +185,7 @@ export const make = Effect.fn("RelayMachineDiscovery.make")(function* () {
       } else {
         yield* clearOfflineReport(machine.machineId);
       }
-      yield* updateEnvironment(generation, machine.machineId, (current) => ({
+      yield* updateMachine(generation, machine.machineId, (current) => ({
         ...current,
         availability: result.success.status,
         status: Option.some(result.success),
@@ -195,7 +195,7 @@ export const make = Effect.fn("RelayMachineDiscovery.make")(function* () {
     }
 
     yield* clearOfflineReport(machine.machineId);
-    yield* updateEnvironment(generation, machine.machineId, (current) => ({
+    yield* updateMachine(generation, machine.machineId, (current) => ({
       ...current,
       availability: "error",
       error: Option.some(result.failure),
@@ -264,7 +264,7 @@ export const make = Effect.fn("RelayMachineDiscovery.make")(function* () {
       if ((yield* Ref.get(accountGeneration)) !== generation) {
         return;
       }
-      const next = new Map<string, RelayDiscoveredEnvironment>();
+      const next = new Map<string, RelayDiscoveredMachine>();
       for (const machine of machines) {
         next.set(machine.machineId, {
           machine,

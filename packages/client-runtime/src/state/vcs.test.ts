@@ -26,16 +26,16 @@ import {
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineRegistry from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
-import { EnvironmentRpcUnavailableError } from "../rpc/client.ts";
+import { MachineRpcUnavailableError } from "../rpc/client.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
 
 import {
   commitVcsRefsRefresh,
-  createVcsEnvironmentAtoms,
+  createVcsMachineAtoms,
   makeCachedVcsRefsChanges,
 } from "./vcs.ts";
 import {
@@ -100,9 +100,9 @@ function session(client: WsRpcProtocolClient): RpcSession {
 
 function cacheWithRefs(
   refs: Option.Option<VcsListRefsResult>,
-  overrides: Partial<Persistence.EnvironmentCacheStore["Service"]> = {},
+  overrides: Partial<Persistence.MachineCacheStore["Service"]> = {},
 ) {
-  return Persistence.EnvironmentCacheStore.of({
+  return Persistence.MachineCacheStore.of({
     loadShell: () => Effect.succeedNone,
     saveShell: () => Effect.void,
     loadThread: () => Effect.succeedNone,
@@ -125,7 +125,7 @@ describe("cached VCS refs", () => {
     const machine = {
       machineId: TARGET.machineId,
     };
-    const otherEnvironment = {
+    const otherMachine = {
       machineId: MachineId.make("machine-2"),
     };
 
@@ -133,7 +133,7 @@ describe("cached VCS refs", () => {
       revision: 0,
       persistedCacheReadable: true,
     });
-    expect(registry.get(vcsRefsCacheStateAtom(otherEnvironment))).toEqual({
+    expect(registry.get(vcsRefsCacheStateAtom(otherMachine))).toEqual({
       revision: 0,
       persistedCacheReadable: true,
     });
@@ -144,7 +144,7 @@ describe("cached VCS refs", () => {
       revision: 1,
       persistedCacheReadable: true,
     });
-    expect(registry.get(vcsRefsCacheStateAtom(otherEnvironment))).toEqual({
+    expect(registry.get(vcsRefsCacheStateAtom(otherMachine))).toEqual({
       revision: 0,
       persistedCacheReadable: true,
     });
@@ -161,7 +161,7 @@ describe("cached VCS refs", () => {
         const clears = yield* Ref.make(0);
         const revisionsObservedDuringClear = yield* Ref.make<ReadonlyArray<number>>([]);
         const cache = cacheWithRefs(Option.none(), {
-          saveVcsRefs: (_environmentId, _cwd, refs) =>
+          saveVcsRefs: (_machineId, _cwd, refs) =>
             Ref.update(saved, (current) => [...current, refs]),
           clearVcsRefs: () =>
             Effect.all([
@@ -176,7 +176,7 @@ describe("cached VCS refs", () => {
         yield* invalidateCachedVcsRefs(registry, {
           machineId: TARGET.machineId,
           cwd: "/repo-worktree",
-        }).pipe(Effect.provideService(Persistence.EnvironmentCacheStore, cache));
+        }).pipe(Effect.provideService(Persistence.MachineCacheStore, cache));
 
         expect(
           yield* commitVcsRefsRefresh(registry, cache, {
@@ -213,7 +213,7 @@ describe("cached VCS refs", () => {
   it.effect("invalidates persisted refs when ref-affecting commands settle", () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const expectedError = new EnvironmentRpcUnavailableError({
+        const expectedError = new MachineRpcUnavailableError({
           machineId: TARGET.machineId,
           message: "pull failed after fetching refs",
         });
@@ -221,7 +221,7 @@ describe("cached VCS refs", () => {
           [WS_METHODS.vcsPull]: () => Effect.fail(expectedError),
           [WS_METHODS.vcsRefreshStatus]: () => Effect.void,
         } as unknown as WsRpcProtocolClient;
-        const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        const supervisor = MachineSupervisor.MachineSupervisor.of({
           target: TARGET,
           state: yield* SubscriptionRef.make(CONNECTED_CONNECTION_STATE),
           session: yield* SubscriptionRef.make(Option.some(session(client))),
@@ -229,27 +229,27 @@ describe("cached VCS refs", () => {
           connect: Effect.void,
           disconnect: Effect.void,
           retryNow: Effect.void,
-        } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
-        const run: EnvironmentRegistry.EnvironmentRegistry["Service"]["run"] = (
-          _environmentId,
+        } satisfies MachineSupervisor.MachineSupervisor["Service"]);
+        const run: MachineRegistry.MachineRegistry["Service"]["run"] = (
+          _machineId,
           effect,
-        ) => Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
-        const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
+        ) => Effect.provideService(effect, MachineSupervisor.MachineSupervisor, supervisor);
+        const machineRegistry = MachineRegistry.MachineRegistry.of({
           run,
-        } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]);
+        } as unknown as MachineRegistry.MachineRegistry["Service"]);
         const clears = yield* Ref.make(0);
         const runtime = Atom.runtime(
           Layer.merge(
-            Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+            Layer.succeed(MachineRegistry.MachineRegistry, machineRegistry),
             Layer.succeed(
-              Persistence.EnvironmentCacheStore,
+              Persistence.MachineCacheStore,
               cacheWithRefs(Option.none(), {
                 clearVcsRefs: () => Ref.update(clears, (count) => count + 1),
               }),
             ),
           ),
         );
-        const atoms = createVcsEnvironmentAtoms(runtime);
+        const atoms = createVcsMachineAtoms(runtime);
         const registry = yield* Effect.acquireRelease(Effect.sync(AtomRegistry.make), (registry) =>
           Effect.sync(() => registry.dispose()),
         );
@@ -293,7 +293,7 @@ describe("cached VCS refs", () => {
         const cache = cacheWithRefs(Option.none(), {
           loadVcsRefs: () =>
             Ref.update(loads, (count) => count + 1).pipe(Effect.andThen(Ref.get(persisted))),
-          saveVcsRefs: (_environmentId, _cwd, refs) => Ref.set(persisted, Option.some(refs)),
+          saveVcsRefs: (_machineId, _cwd, refs) => Ref.set(persisted, Option.some(refs)),
           clearVcsRefs: () =>
             Ref.updateAndGet(clearAttempts, (count) => count + 1).pipe(
               Effect.flatMap((attempt) =>
@@ -312,7 +312,7 @@ describe("cached VCS refs", () => {
         yield* invalidateCachedVcsRefs(registry, {
           machineId: TARGET.machineId,
           cwd: "/repo",
-        }).pipe(Effect.provideService(Persistence.EnvironmentCacheStore, cache));
+        }).pipe(Effect.provideService(Persistence.MachineCacheStore, cache));
 
         const state = registry.get(vcsRefsCacheStateAtom(TARGET));
         expect(state).toEqual({
@@ -320,7 +320,7 @@ describe("cached VCS refs", () => {
           persistedCacheReadable: false,
         });
 
-        const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        const supervisor = MachineSupervisor.MachineSupervisor.of({
           target: TARGET,
           state: yield* SubscriptionRef.make(AVAILABLE_CONNECTION_STATE),
           session: yield* SubscriptionRef.make(Option.none<RpcSession>()),
@@ -328,7 +328,7 @@ describe("cached VCS refs", () => {
           connect: Effect.void,
           disconnect: Effect.void,
           retryNow: Effect.void,
-        } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+        } satisfies MachineSupervisor.MachineSupervisor["Service"]);
         const refs = yield* Stream.unwrap(
           makeCachedVcsRefsChanges(
             { cwd: "/repo", limit: 100 },
@@ -336,8 +336,8 @@ describe("cached VCS refs", () => {
             registry,
             state.persistedCacheReadable,
           ).pipe(
-            Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-            Effect.provideService(Persistence.EnvironmentCacheStore, cache),
+            Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
+            Effect.provideService(Persistence.MachineCacheStore, cache),
           ),
         ).pipe(Stream.runHead, Effect.forkChild({ startImmediately: true }));
 
@@ -369,8 +369,8 @@ describe("cached VCS refs", () => {
             registry,
             recoveredState.persistedCacheReadable,
           ).pipe(
-            Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-            Effect.provideService(Persistence.EnvironmentCacheStore, cache),
+            Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
+            Effect.provideService(Persistence.MachineCacheStore, cache),
           ),
         ).pipe(Stream.runHead);
 
@@ -383,7 +383,7 @@ describe("cached VCS refs", () => {
   it.effect("loads an unfiltered branch list without a connection", () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        const supervisor = MachineSupervisor.MachineSupervisor.of({
           target: TARGET,
           state: yield* SubscriptionRef.make(AVAILABLE_CONNECTION_STATE),
           session: yield* SubscriptionRef.make(Option.none<RpcSession>()),
@@ -391,12 +391,12 @@ describe("cached VCS refs", () => {
           connect: Effect.void,
           disconnect: Effect.void,
           retryNow: Effect.void,
-        } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+        } satisfies MachineSupervisor.MachineSupervisor["Service"]);
         const refs = yield* Stream.unwrap(
           makeCachedVcsRefsChanges({ cwd: "/repo", limit: 100 }).pipe(
-            Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+            Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
             Effect.provideService(
-              Persistence.EnvironmentCacheStore,
+              Persistence.MachineCacheStore,
               cacheWithRefs(Option.some(CACHED_REFS)),
             ),
           ),
@@ -413,7 +413,7 @@ describe("cached VCS refs", () => {
         const logs: unknown[] = [];
         const logger = Logger.make(({ message }) => logs.push(message));
         const liveSession = yield* SubscriptionRef.make(Option.none<RpcSession>());
-        const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        const supervisor = MachineSupervisor.MachineSupervisor.of({
           target: TARGET,
           state: yield* SubscriptionRef.make(CONNECTED_CONNECTION_STATE),
           session: liveSession,
@@ -421,12 +421,12 @@ describe("cached VCS refs", () => {
           connect: Effect.void,
           disconnect: Effect.void,
           retryNow: Effect.void,
-        } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+        } satisfies MachineSupervisor.MachineSupervisor["Service"]);
         const refs = yield* Stream.unwrap(
           makeCachedVcsRefsChanges({ cwd: "/repo", limit: 100 }).pipe(
-            Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+            Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
             Effect.provideService(
-              Persistence.EnvironmentCacheStore,
+              Persistence.MachineCacheStore,
               cacheWithRefs(Option.some(CACHED_REFS)),
             ),
           ),
@@ -475,7 +475,7 @@ describe("cached VCS refs", () => {
             ),
         } as unknown as WsRpcProtocolClient;
         const liveSession = yield* SubscriptionRef.make(Option.some(session(client)));
-        const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        const supervisor = MachineSupervisor.MachineSupervisor.of({
           target: TARGET,
           state: yield* SubscriptionRef.make(CONNECTED_CONNECTION_STATE),
           session: liveSession,
@@ -483,12 +483,12 @@ describe("cached VCS refs", () => {
           connect: Effect.void,
           disconnect: Effect.void,
           retryNow: Effect.void,
-        } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+        } satisfies MachineSupervisor.MachineSupervisor["Service"]);
 
         const fiber = yield* Stream.unwrap(
           makeCachedVcsRefsChanges({ cwd: "/repo", limit: 100 }).pipe(
-            Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-            Effect.provideService(Persistence.EnvironmentCacheStore, cacheWithRefs(Option.none())),
+            Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
+            Effect.provideService(Persistence.MachineCacheStore, cacheWithRefs(Option.none())),
           ),
         ).pipe(Stream.runHead, Effect.forkChild);
 
@@ -526,7 +526,7 @@ describe("cached VCS refs", () => {
             ),
         } as unknown as WsRpcProtocolClient;
         const liveSession = yield* SubscriptionRef.make(Option.some(session(client)));
-        const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        const supervisor = MachineSupervisor.MachineSupervisor.of({
           target: TARGET,
           state: yield* SubscriptionRef.make(CONNECTED_CONNECTION_STATE),
           session: liveSession,
@@ -534,12 +534,12 @@ describe("cached VCS refs", () => {
           connect: Effect.void,
           disconnect: Effect.void,
           retryNow: Effect.void,
-        } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+        } satisfies MachineSupervisor.MachineSupervisor["Service"]);
         const refs = yield* Stream.unwrap(
           makeCachedVcsRefsChanges({ cwd: "/repo", limit: 100 }).pipe(
-            Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+            Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
             Effect.provideService(
-              Persistence.EnvironmentCacheStore,
+              Persistence.MachineCacheStore,
               cacheWithRefs(Option.some(CACHED_REFS)),
             ),
           ),
@@ -574,7 +574,7 @@ describe("cached VCS refs", () => {
         const client = {
           [WS_METHODS.vcsListRefs]: () => Effect.succeed(LIVE_REFS),
         } as unknown as WsRpcProtocolClient;
-        const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        const supervisor = MachineSupervisor.MachineSupervisor.of({
           target: TARGET,
           state: yield* SubscriptionRef.make(CONNECTED_CONNECTION_STATE),
           session: yield* SubscriptionRef.make(Option.some(session(client))),
@@ -582,13 +582,13 @@ describe("cached VCS refs", () => {
           connect: Effect.void,
           disconnect: Effect.void,
           retryNow: Effect.void,
-        } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+        } satisfies MachineSupervisor.MachineSupervisor["Service"]);
 
         const refs = yield* Stream.unwrap(
           makeCachedVcsRefsChanges({ cwd: "/repo", limit: 100 }).pipe(
-            Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+            Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
             Effect.provideService(
-              Persistence.EnvironmentCacheStore,
+              Persistence.MachineCacheStore,
               cacheWithRefs(Option.some(CACHED_REFS)),
             ),
           ),
@@ -601,7 +601,7 @@ describe("cached VCS refs", () => {
 });
 
 vi.mock("./session.ts", () => ({
-  createEnvironmentSessionAtoms: () => ({ sessionStateAtom: grantedSessions }),
+  createMachineSessionAtoms: () => ({ sessionStateAtom: grantedSessions }),
 }));
 const grantedSessions = Atom.family((_id: MachineId) =>
   Atom.make(

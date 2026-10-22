@@ -20,7 +20,7 @@ import * as DateTime from "effect/DateTime";
 
 import { formatSubagentDisplayTitle } from "./subagentDisplay.ts";
 
-export interface EnvironmentProject extends OrchestrationProjectShell {
+export interface MachineProject extends OrchestrationProjectShell {
   readonly machineId: MachineId;
   readonly isScratch?: true;
 }
@@ -29,7 +29,7 @@ export interface EnvironmentProject extends OrchestrationProjectShell {
  * The projection stays nested so the server projection and all structurally
  * shared collections retain their identities.
  */
-export interface EnvironmentThread {
+export interface MachineThread {
   readonly machineId: MachineId;
   readonly projection: OrchestrationV2ThreadProjection;
 }
@@ -72,7 +72,7 @@ export type ThreadStructure = Omit<
   readonly visibleTurnItems: ReadonlyArray<ThreadStructureVisibleTurnItem>;
 };
 
-export interface EnvironmentThreadStructure {
+export interface MachineThreadStructure {
   readonly machineId: MachineId;
   readonly projection: ThreadStructure;
 }
@@ -134,7 +134,7 @@ function threadRunStatusIsActive(status: ThreadRuntimeSummary["status"]): boolea
   );
 }
 
-export interface EnvironmentThreadShell {
+export interface MachineThreadShell {
   readonly machineId: MachineId;
   readonly id: ThreadId;
   readonly projectId: ProjectId;
@@ -241,7 +241,7 @@ function shellRuntime(thread: OrchestrationV2ThreadShell): ThreadRuntimeSummary 
 export function scopeProject(
   machineId: MachineId,
   project: OrchestrationProjectShell,
-): EnvironmentProject {
+): MachineProject {
   return { ...project, machineId };
 }
 
@@ -251,7 +251,7 @@ export function presentThreadShell(
   machineId: MachineId,
   thread: OrchestrationV2ThreadShell,
   pendingSubagentRequest: PendingSubagentRequest | null = null,
-): EnvironmentThreadShell {
+): MachineThreadShell {
   const updatedAt = iso(thread.updatedAt);
   const latestRun =
     thread.latestRunId === null
@@ -347,14 +347,14 @@ export function presentThreadShell(
 export function scopeThreadShell(
   machineId: MachineId,
   thread: OrchestrationV2ThreadShell,
-): EnvironmentThreadShell {
+): MachineThreadShell {
   return presentThreadShell(machineId, thread);
 }
 
 const THREAD_PROVIDER_STACK_LIMIT = 3;
 
 export function resolveThreadProviderStack(
-  thread: Pick<EnvironmentThreadShell, "providerInstanceHistory" | "modelSelection" | "runtime">,
+  thread: Pick<MachineThreadShell, "providerInstanceHistory" | "modelSelection" | "runtime">,
 ): ReadonlyArray<ProviderInstanceId> {
   const current = thread.runtime?.providerInstanceId ?? thread.modelSelection.instanceId;
   const previous = thread.providerInstanceHistory.filter((instanceId) => instanceId !== current);

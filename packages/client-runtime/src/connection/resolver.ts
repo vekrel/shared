@@ -26,7 +26,7 @@ import {
 import * as ConnectionCredentialStore from "./credentialStore.ts";
 import {
   credentialMissingError,
-  environmentMismatchError,
+  machineMismatchError,
   mapRemoteMachineError,
   profileMissingError,
 } from "./errors.ts";
@@ -140,7 +140,7 @@ const makeBearerBroker = Effect.fn("clientRuntime.connection.broker.makeBearer")
       });
     }
     if (profile.machineId !== target.machineId) {
-      return yield* environmentMismatchError({
+      return yield* machineMismatchError({
         expected: target.machineId,
         actual: profile.machineId,
       });
@@ -223,7 +223,7 @@ const makeSshBroker = Effect.fn("clientRuntime.connection.broker.makeSsh")(funct
       });
     }
     if (profile.machineId !== target.machineId) {
-      return yield* environmentMismatchError({
+      return yield* machineMismatchError({
         expected: target.machineId,
         actual: profile.machineId,
       });
@@ -310,7 +310,7 @@ export const make = Effect.gen(function* () {
       Effect.provideService(HttpClient.HttpClient, httpClient),
     );
     if (descriptor.machineId !== target.machineId) {
-      return yield* environmentMismatchError({
+      return yield* machineMismatchError({
         expected: target.machineId,
         actual: descriptor.machineId,
       });

@@ -1,19 +1,19 @@
 import { WS_METHODS } from "@vekrel/contracts";
 import { Atom } from "effect/reactivity";
 
-import { createEnvironmentRpcCommand, createEnvironmentRpcQueryAtomFamily } from "./runtime.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
+import { createMachineRpcCommand, createMachineRpcQueryAtomFamily } from "./runtime.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
 import { vcsCommandConcurrency, vcsCommandScheduler } from "./vcsCommandScheduler.ts";
 
-export function createGitEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+export function createGitMachineAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry | R, E>,
 ) {
   return {
-    pullRequestResolution: createEnvironmentRpcQueryAtomFamily(runtime, {
+    pullRequestResolution: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:git:resolve-pull-request",
       tag: WS_METHODS.gitResolvePullRequest,
     }),
-    preparePullRequestThread: createEnvironmentRpcCommand(runtime, {
+    preparePullRequestThread: createMachineRpcCommand(runtime, {
       label: "machine-data:git:prepare-pull-request-thread",
       tag: WS_METHODS.gitPreparePullRequestThread,
       scheduler: vcsCommandScheduler,

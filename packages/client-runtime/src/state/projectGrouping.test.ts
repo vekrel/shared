@@ -1,8 +1,8 @@
 import { MachineId, ProjectId } from "@vekrel/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import type { EnvironmentProject } from "./models.ts";
-import { chooseLoadBalancedEnvironment } from "../load-balancing.ts";
+import type { MachineProject } from "./models.ts";
+import { chooseLoadBalancedMachine } from "../load-balancing.ts";
 import {
   buildProjectGroups,
   deriveLogicalProjectKeyFromSettings,
@@ -30,13 +30,13 @@ describe("load balancing shared project machines", () => {
       { machineId: "idle", resources, weight: 1 },
       { machineId: "preferred", resources: { ...resources, cpuCount: 4 }, weight: 3 },
     ];
-    expect(chooseLoadBalancedEnvironment(candidates, now)).toBe("preferred");
-    expect(chooseLoadBalancedEnvironment(candidates.slice(0, 2), now)).toBe("idle");
+    expect(chooseLoadBalancedMachine(candidates, now)).toBe("preferred");
+    expect(chooseLoadBalancedMachine(candidates.slice(0, 2), now)).toBe("idle");
   });
 
   it("rejects stale, unknown, excluded and saturated machines", () => {
     expect(
-      chooseLoadBalancedEnvironment(
+      chooseLoadBalancedMachine(
         [
           {
             machineId: "stale",
@@ -73,8 +73,8 @@ describe("load balancing shared project machines", () => {
       receivedAt: now,
       weight: 1,
     };
-    expect(chooseLoadBalancedEnvironment([candidate], now)).toBe("different-clock");
-    expect(chooseLoadBalancedEnvironment([candidate], now + 15_001)).toBeNull();
+    expect(chooseLoadBalancedMachine([candidate], now)).toBe("different-clock");
+    expect(chooseLoadBalancedMachine([candidate], now + 15_001)).toBeNull();
   });
 });
 const repositoryIdentity = {
@@ -93,8 +93,8 @@ const repositoryIdentity = {
 function makeProject(
   id: string,
   workspaceRoot: string,
-  overrides: Partial<EnvironmentProject> = {},
-): EnvironmentProject {
+  overrides: Partial<MachineProject> = {},
+): MachineProject {
   return {
     machineId,
     id: ProjectId.make(id),

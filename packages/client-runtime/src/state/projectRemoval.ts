@@ -1,11 +1,11 @@
-import type { EnvironmentProject, EnvironmentThreadShell } from "./models.ts";
+import type { MachineProject, MachineThreadShell } from "./models.ts";
 
 export function planProjectRemoval<
-  Thread extends Pick<EnvironmentThreadShell, "machineId" | "projectId">,
+  Thread extends Pick<MachineThreadShell, "machineId" | "projectId">,
 >(options: {
   readonly members: ReadonlyArray<
-    Pick<EnvironmentProject, "id" | "machineId" | "title" | "workspaceRoot"> & {
-      readonly environmentLabel?: string | null;
+    Pick<MachineProject, "id" | "machineId" | "title" | "workspaceRoot"> & {
+      readonly machineLabel?: string | null;
     }
   >;
   readonly groupMemberCount: number;
@@ -29,8 +29,8 @@ export function planProjectRemoval<
     ...(singleMember
       ? [
           `Path: ${singleMember.workspaceRoot}`,
-          ...(singleMember.environmentLabel
-            ? [`Machine: ${singleMember.environmentLabel}`]
+          ...(singleMember.machineLabel
+            ? [`Machine: ${singleMember.machineLabel}`]
             : []),
         ]
       : [`This removes ${members.length} grouped project entries.`]),

@@ -36,8 +36,8 @@ export type PullRequestDiffLoadError =
   | RemoteMachineRequestError
   | PullRequestDiffCredentialRejectedError;
 
-export const fetchEnvironmentPullRequestDiff = Effect.fn(
-  "clientRuntime.state.fetchEnvironmentPullRequestDiff",
+export const fetchMachinePullRequestDiff = Effect.fn(
+  "clientRuntime.state.fetchMachinePullRequestDiff",
 )(function* (input: {
   readonly prepared: PreparedConnection;
   readonly diff: PullRequestDiffInput;
@@ -88,7 +88,7 @@ export const layer: Layer.Layer<PullRequestDiffLoader, never, HttpClient.HttpCli
     );
     return PullRequestDiffLoader.of({
       load: (prepared, input) =>
-        fetchEnvironmentPullRequestDiff({
+        fetchMachinePullRequestDiff({
           prepared,
           diff: input,
           signer,

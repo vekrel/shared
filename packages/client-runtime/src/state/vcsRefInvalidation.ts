@@ -19,7 +19,7 @@ export interface VcsRefsCacheState {
   readonly persistedCacheReadable: boolean;
 }
 
-const stateByEnvironment = Atom.family((machineId: MachineId) =>
+const stateByMachine = Atom.family((machineId: MachineId) =>
   Atom.make<VcsRefsCacheState>({
     revision: 0,
     persistedCacheReadable: true,
@@ -28,7 +28,7 @@ const stateByEnvironment = Atom.family((machineId: MachineId) =>
 const persistenceLock = PartitionedSemaphore.makeUnsafe<MachineId>({ permits: 1 });
 
 export function vcsRefsCacheStateAtom(target: VcsRefsInvalidationTarget) {
-  return stateByEnvironment(target.machineId);
+  return stateByMachine(target.machineId);
 }
 
 export function invalidateVcsRefs(
@@ -58,7 +58,7 @@ export const invalidateCachedVcsRefs = Effect.fn("VcsRefsState.invalidateCached"
   registry: AtomRegistry.AtomRegistry,
   target: CachedVcsRefsInvalidationTarget,
 ) {
-  const cache = yield* Persistence.EnvironmentCacheStore;
+  const cache = yield* Persistence.MachineCacheStore;
   yield* withVcsRefsPersistenceLock(
     target.machineId,
     Effect.gen(function* () {

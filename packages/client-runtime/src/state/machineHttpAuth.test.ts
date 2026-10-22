@@ -29,13 +29,13 @@ import * as ManagedRelay from "../relay/managedRelay.ts";
 import { type RemoteMachineRequestError } from "../rpc/http.ts";
 import * as RpcHttp from "../rpc/http.ts";
 import * as PullRequestDiffLoader from "./pullRequestDiffHttp.ts";
-import { fetchEnvironmentSessionState } from "./session.ts";
-import { fetchEnvironmentShellSnapshot } from "./shellSnapshotHttp.ts";
+import { fetchMachineSessionState } from "./session.ts";
+import { fetchMachineShellSnapshot } from "./shellSnapshotHttp.ts";
 import * as ThreadSnapshotLoader from "./threadSnapshotHttp.ts";
-import { fetchEnvironmentThreadTranscript } from "./threadTranscriptHttp.ts";
-import { fetchEnvironmentBoundedThreadSnapshot } from "./boundedThreadSnapshotHttp.ts";
+import { fetchMachineThreadTranscript } from "./threadTranscriptHttp.ts";
+import { fetchMachineBoundedThreadSnapshot } from "./boundedThreadSnapshotHttp.ts";
 import * as BoundedThreadSnapshotHttp from "./boundedThreadSnapshotHttp.ts";
-import { fetchEnvironmentThreadHistoryPage } from "./threadHistoryHttp.ts";
+import { fetchMachineThreadHistoryPage } from "./threadHistoryHttp.ts";
 import { v2Projection } from "./orchestrationV2TestFixtures.ts";
 
 const encodeThreadSnapshot = Schema.encodeSync(OrchestrationV2ThreadDetailSnapshot);
@@ -192,7 +192,7 @@ const LOADERS: ReadonlyArray<{
     response: DIFF_RESULT,
     expected: DIFF_RESULT,
     load: (input: HttpInput) =>
-      PullRequestDiffLoader.fetchEnvironmentPullRequestDiff({ ...input, diff: DIFF }),
+      PullRequestDiffLoader.fetchMachinePullRequestDiff({ ...input, diff: DIFF }),
   },
   {
     name: "session permissions",
@@ -200,7 +200,7 @@ const LOADERS: ReadonlyArray<{
     path: "/api/auth/session",
     response: SESSION,
     expected: SESSION,
-    load: fetchEnvironmentSessionState,
+    load: fetchMachineSessionState,
   },
   {
     name: "shell snapshot",
@@ -209,7 +209,7 @@ const LOADERS: ReadonlyArray<{
     response: SHELL,
     expected: SHELL,
     load: (input: HttpInput) =>
-      fetchEnvironmentShellSnapshot(input).pipe(
+      fetchMachineShellSnapshot(input).pipe(
         Effect.map(({ loadPullRequests: _links, ...snapshot }) => snapshot),
       ),
   },
@@ -220,7 +220,7 @@ const LOADERS: ReadonlyArray<{
     response: encodeThreadSnapshot(THREAD),
     expected: THREAD,
     load: (input: HttpInput) =>
-      ThreadSnapshotLoader.fetchEnvironmentThreadSnapshot({
+      ThreadSnapshotLoader.fetchMachineThreadSnapshot({
         ...input,
         threadId: THREAD.projection.thread.id,
       }),
@@ -232,7 +232,7 @@ const LOADERS: ReadonlyArray<{
     response: encodeThreadTranscript(TRANSCRIPT),
     expected: TRANSCRIPT,
     load: (input: HttpInput) =>
-      fetchEnvironmentThreadTranscript({ ...input, threadId: TRANSCRIPT.threadId }),
+      fetchMachineThreadTranscript({ ...input, threadId: TRANSCRIPT.threadId }),
   },
   {
     name: "bounded thread snapshot",
@@ -241,7 +241,7 @@ const LOADERS: ReadonlyArray<{
     response: encodeBoundedSnapshot(BOUNDED_THREAD),
     expected: BOUNDED_THREAD,
     load: (input: HttpInput) =>
-      fetchEnvironmentBoundedThreadSnapshot({ ...input, threadId: THREAD.projection.thread.id }),
+      fetchMachineBoundedThreadSnapshot({ ...input, threadId: THREAD.projection.thread.id }),
   },
   {
     name: "older thread history",
@@ -250,7 +250,7 @@ const LOADERS: ReadonlyArray<{
     response: THREAD_HISTORY,
     expected: THREAD_HISTORY,
     load: (input: HttpInput) =>
-      fetchEnvironmentThreadHistoryPage({
+      fetchMachineThreadHistoryPage({
         ...input,
         threadId: THREAD.projection.thread.id,
         cursor: "older-page",
@@ -273,7 +273,7 @@ describe("authenticated machine HTTP requests", () => {
   it.effect("keeps the status of a shell snapshot error that is not a declared error", () =>
     Effect.gen(function* () {
       const harness = makeHarness(() => Response.json({ error: "bad_gateway" }, { status: 502 }));
-      const error = yield* fetchEnvironmentShellSnapshot(harness.input).pipe(
+      const error = yield* fetchMachineShellSnapshot(harness.input).pipe(
         Effect.provide(harness.httpLayer),
         Effect.flip,
       );
@@ -327,25 +327,25 @@ describe("authenticated machine HTTP requests", () => {
       name: "thread transcript",
       response: encodeThreadTranscript(TRANSCRIPT),
       load: (input: HttpInput) =>
-        fetchEnvironmentThreadTranscript({ ...input, threadId: MCP_THREAD_ID }),
+        fetchMachineThreadTranscript({ ...input, threadId: MCP_THREAD_ID }),
     },
     {
       name: "thread snapshot",
       response: encodeThreadSnapshot(THREAD),
       load: (input: HttpInput) =>
-        ThreadSnapshotLoader.fetchEnvironmentThreadSnapshot({ ...input, threadId: MCP_THREAD_ID }),
+        ThreadSnapshotLoader.fetchMachineThreadSnapshot({ ...input, threadId: MCP_THREAD_ID }),
     },
     {
       name: "bounded thread snapshot",
       response: encodeBoundedSnapshot(BOUNDED_THREAD),
       load: (input: HttpInput) =>
-        fetchEnvironmentBoundedThreadSnapshot({ ...input, threadId: MCP_THREAD_ID }),
+        fetchMachineBoundedThreadSnapshot({ ...input, threadId: MCP_THREAD_ID }),
     },
     {
       name: "older thread history",
       response: THREAD_HISTORY,
       load: (input: HttpInput) =>
-        fetchEnvironmentThreadHistoryPage({
+        fetchMachineThreadHistoryPage({
           ...input,
           threadId: MCP_THREAD_ID,
           cursor: "older-page",
@@ -370,7 +370,7 @@ describe("authenticated machine HTTP requests", () => {
       const harness = makeHarness((requestNumber) =>
         requestNumber === 1 ? credentialRejectedResponse() : Response.json(DIFF_RESULT),
       );
-      const result = yield* PullRequestDiffLoader.fetchEnvironmentPullRequestDiff({
+      const result = yield* PullRequestDiffLoader.fetchMachinePullRequestDiff({
         ...harness.input,
         diff: DIFF,
       }).pipe(Effect.provide(harness.httpLayer));
@@ -445,7 +445,7 @@ describe("authenticated machine HTTP requests", () => {
   it.effect("preserves the credential rejection after the one recovery attempt fails", () =>
     Effect.gen(function* () {
       const harness = makeHarness(() => credentialRejectedResponse());
-      const error = yield* PullRequestDiffLoader.fetchEnvironmentPullRequestDiff({
+      const error = yield* PullRequestDiffLoader.fetchMachinePullRequestDiff({
         ...harness.input,
         diff: DIFF,
       }).pipe(Effect.provide(harness.httpLayer), Effect.flip);
@@ -465,14 +465,14 @@ describe("authenticated machine HTTP requests", () => {
       reply: () =>
         Response.json(
           {
-            _tag: "EnvironmentScopeRequiredError",
+            _tag: "MachineScopeRequiredError",
             code: "insufficient_scope",
             requiredScope: "orchestration:read",
             traceId: "trace-scope",
           },
           { status: 403 },
         ),
-      errorTag: "EnvironmentScopeRequiredError",
+      errorTag: "MachineScopeRequiredError",
     },
     {
       name: "missing credential",
@@ -492,7 +492,7 @@ describe("authenticated machine HTTP requests", () => {
   ])("does not renew or retry on $name", ({ reply, errorTag }) =>
     Effect.gen(function* () {
       const harness = makeHarness(reply);
-      const error = yield* PullRequestDiffLoader.fetchEnvironmentPullRequestDiff({
+      const error = yield* PullRequestDiffLoader.fetchMachinePullRequestDiff({
         ...harness.input,
         diff: DIFF,
       }).pipe(Effect.provide(harness.httpLayer), Effect.flip);
@@ -508,7 +508,7 @@ describe("authenticated machine HTTP requests", () => {
       const harness = makeHarness((requestNumber) =>
         Response.json(requestNumber === 1 ? UNAUTHENTICATED_SESSION : SESSION),
       );
-      const result = yield* fetchEnvironmentSessionState(harness.input).pipe(
+      const result = yield* fetchMachineSessionState(harness.input).pipe(
         Effect.provide(harness.httpLayer),
       );
 
@@ -524,7 +524,7 @@ describe("authenticated machine HTTP requests", () => {
   it.effect("reports persistent session rejection instead of showing missing permissions", () =>
     Effect.gen(function* () {
       const harness = makeHarness(() => Response.json(UNAUTHENTICATED_SESSION));
-      const error = yield* fetchEnvironmentSessionState(harness.input).pipe(
+      const error = yield* fetchMachineSessionState(harness.input).pipe(
         Effect.provide(harness.httpLayer),
         Effect.flip,
       );
@@ -545,7 +545,7 @@ describe("authenticated machine HTTP requests", () => {
     ({ authorization }) =>
       Effect.gen(function* () {
         const harness = makeHarness(() => Response.json(UNAUTHENTICATED_SESSION));
-        const result = yield* fetchEnvironmentSessionState({
+        const result = yield* fetchMachineSessionState({
           prepared: { ...PREPARED, httpAuthorization: authorization },
           signer: Option.none(),
         }).pipe(Effect.provide(harness.httpLayer));
@@ -573,7 +573,7 @@ describe("authenticated machine HTTP requests", () => {
         ...harness.remoteAuthorization,
         authorizeDpopHttp: () => Effect.fail(failure),
       });
-      const error = yield* fetchEnvironmentSessionState({
+      const error = yield* fetchMachineSessionState({
         ...harness.input,
         remoteAuthorization: Option.some(remoteAuthorization),
       }).pipe(Effect.provide(harness.httpLayer), Effect.flip);
@@ -591,7 +591,7 @@ describe("authenticated machine HTTP requests", () => {
   it.effect("does not fall back to a captured DPoP token when authorization is unavailable", () =>
     Effect.gen(function* () {
       const harness = makeHarness(() => Response.json(SESSION));
-      const error = yield* fetchEnvironmentSessionState({
+      const error = yield* fetchMachineSessionState({
         prepared: PREPARED,
         signer: harness.input.signer,
       }).pipe(Effect.provide(harness.httpLayer), Effect.flip);

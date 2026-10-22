@@ -33,7 +33,7 @@ export type ConnectionDriverProgress =
       readonly prepared: PreparedConnection;
     };
 
-export interface EnvironmentConnectionLease {
+export interface MachineConnectionLease {
   readonly prepared: PreparedConnection;
   readonly session: RpcSession.RpcSession;
 }
@@ -48,7 +48,7 @@ export class ConnectionDriver extends Context.Service<
     readonly connect: (
       entry: ConnectionCatalogEntry,
       reportProgress: (progress: ConnectionDriverProgress) => Effect.Effect<void>,
-    ) => Effect.Effect<EnvironmentConnectionLease, ConnectionAttemptError, Scope.Scope>;
+    ) => Effect.Effect<MachineConnectionLease, ConnectionAttemptError, Scope.Scope>;
     readonly checkRoute: (
       entry: ConnectionCatalogEntry,
       route: ConnectionRoute,
@@ -65,7 +65,7 @@ export const connectOverRoutes = Effect.fn("ConnectionDriver.connectOverRoutes")
   checkRoute: (route: ConnectionRoute) => Effect.Effect<RouteCheck>,
   connectRoute: (
     route: ConnectionRoute,
-  ) => Effect.Effect<EnvironmentConnectionLease, ConnectionAttemptError, R | Scope.Scope>,
+  ) => Effect.Effect<MachineConnectionLease, ConnectionAttemptError, R | Scope.Scope>,
 ) {
   const routes = usableRoutes(entry);
   const checks =
@@ -162,7 +162,7 @@ export const make = Effect.gen(function* () {
         const session = yield* sessions.connect(prepared);
         yield* reportProgress({ stage: "synchronizing", prepared });
         yield* session.ready;
-        return { prepared, session } satisfies EnvironmentConnectionLease;
+        return { prepared, session } satisfies MachineConnectionLease;
       }),
     );
   });

@@ -256,10 +256,10 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
       });
     }
   }
-  const labelEnvironment = presentations.size > 1;
+  const labelMachine = presentations.size > 1;
   for (const [machineId, presentation] of presentations) {
     for (const source of presentation.serverConfig?.usageLimitSources ?? []) {
-      const sourceLabel = labelEnvironment
+      const sourceLabel = labelMachine
         ? `${presentation.entry.target.label} · ${source.label}`
         : source.label;
       for (const account of source.accounts) {
@@ -293,22 +293,22 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
 }
 
 export function collectLimitNotices(presentations: LimitPresentations): readonly string[] {
-  const label = (environmentLabel: string, subject: string) =>
-    presentations.size > 1 ? `${environmentLabel} · ${subject}` : subject;
+  const label = (machineLabel: string, subject: string) =>
+    presentations.size > 1 ? `${machineLabel} · ${subject}` : subject;
   const notices: string[] = [];
   for (const presentation of presentations.values()) {
-    const environmentLabel = presentation.entry.target.label;
+    const machineLabel = presentation.entry.target.label;
     for (const provider of providersWithLimits(presentation.serverConfig?.providers ?? [])) {
       if (provider.usageLimits?.unavailable?.reason === "unsupported") continue;
       const notice = provider.usageLimits ? limitsNotice(provider.usageLimits) : null;
       const name = provider.displayName?.trim() || String(provider.driver);
-      if (notice) notices.push(`${label(environmentLabel, name)}: ${notice}`);
+      if (notice) notices.push(`${label(machineLabel, name)}: ${notice}`);
     }
     for (const source of presentation.serverConfig?.usageLimitSources ?? []) {
       if (source.error) {
-        notices.push(`${label(environmentLabel, source.label)}: ${source.error}`);
+        notices.push(`${label(machineLabel, source.label)}: ${source.error}`);
       } else if (source.accounts.length === 0) {
-        notices.push(`${label(environmentLabel, source.label)}: No accounts reported.`);
+        notices.push(`${label(machineLabel, source.label)}: No accounts reported.`);
       }
     }
   }

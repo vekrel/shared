@@ -18,7 +18,7 @@ import type { ConnectionCatalogEntry } from "./catalog.ts";
 import { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
 import { PrimaryConnectionTarget } from "./model.ts";
 import { describeOutdatedHost, updateOutdatedHost } from "./outdatedHostUpdate.ts";
-import * as EnvironmentRegistry from "./registry.ts";
+import * as MachineRegistry from "./registry.ts";
 import * as ConnectionResolver from "./resolver.ts";
 import * as RelayMachineDiscovery from "../relay/discovery.ts";
 
@@ -55,8 +55,8 @@ describe("describeOutdatedHost", () => {
       const expected = descriptor(undefined, "0.0.45");
       const result = yield* describeOutdatedHost(TARGET.machineId).pipe(
         Effect.provideService(
-          EnvironmentRegistry.EnvironmentRegistry,
-          EnvironmentRegistry.EnvironmentRegistry.of({
+          MachineRegistry.MachineRegistry,
+          MachineRegistry.MachineRegistry.of({
             entries: yield* SubscriptionRef.make<
               ReadonlyMap<MachineId, ConnectionCatalogEntry>
             >(
@@ -64,7 +64,7 @@ describe("describeOutdatedHost", () => {
                 [TARGET.machineId, { target: TARGET, profile: Option.none(), enabled: false }],
               ]),
             ),
-          } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]),
+          } as unknown as MachineRegistry.MachineRegistry["Service"]),
         ),
         Effect.provideService(
           ConnectionResolver.ConnectionResolver,
@@ -176,13 +176,13 @@ describe("updateOutdatedHost", () => {
         ]),
       );
       const calls: Array<string> = [];
-      const registry = EnvironmentRegistry.EnvironmentRegistry.of({
+      const registry = MachineRegistry.MachineRegistry.of({
         entries,
-        setCompatibility: (_environmentId: MachineId, error: unknown) =>
+        setCompatibility: (_machineId: MachineId, error: unknown) =>
           Effect.sync(() => calls.push(`compatibility:${error === null ? "clear" : "block"}`)),
-        setEnabled: (_environmentId: MachineId, enabled: boolean) =>
+        setEnabled: (_machineId: MachineId, enabled: boolean) =>
           Effect.sync(() => calls.push(`enabled:${enabled}`)),
-      } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]);
+      } as unknown as MachineRegistry.MachineRegistry["Service"]);
       const resolver = ConnectionResolver.ConnectionResolver.of({
         prepare: () => Effect.die(new Error("The update must bypass the protocol gate.")),
         prepareForUpdate: () =>
@@ -213,7 +213,7 @@ describe("updateOutdatedHost", () => {
       ).pipe(
         Effect.provide(
           Layer.mergeAll(
-            Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, registry),
+            Layer.succeed(MachineRegistry.MachineRegistry, registry),
             Layer.succeed(ConnectionResolver.ConnectionResolver, resolver),
             Layer.succeed(
               RelayMachineDiscovery.RelayMachineDiscovery,
@@ -258,8 +258,8 @@ describe("updateOutdatedHost", () => {
         Effect.provide(
           Layer.mergeAll(
             Layer.succeed(
-              EnvironmentRegistry.EnvironmentRegistry,
-              EnvironmentRegistry.EnvironmentRegistry.of({
+              MachineRegistry.MachineRegistry,
+              MachineRegistry.MachineRegistry.of({
                 entries: yield* SubscriptionRef.make<
                   ReadonlyMap<MachineId, ConnectionCatalogEntry>
                 >(
@@ -270,7 +270,7 @@ describe("updateOutdatedHost", () => {
                     ],
                   ]),
                 ),
-              } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]),
+              } as unknown as MachineRegistry.MachineRegistry["Service"]),
             ),
             Layer.succeed(
               ConnectionResolver.ConnectionResolver,

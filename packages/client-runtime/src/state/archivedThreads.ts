@@ -16,23 +16,23 @@ export interface ArchivedThreadSnapshotsState {
   readonly isLoading: boolean;
 }
 
-const ARCHIVED_THREADS_ENVIRONMENT_KEY_SEPARATOR = "\u001f";
+const ARCHIVED_THREADS_MACHINE_KEY_SEPARATOR = "\u001f";
 const machineIdOrder = Order.String as Order.Order<MachineId>;
 
-export function makeArchivedThreadsEnvironmentKey(
+export function makeArchivedThreadsMachineKey(
   machineIds: ReadonlyArray<MachineId>,
 ): string {
   return pipe(machineIds, Arr.sort(machineIdOrder), (sortedMachineIds) =>
-    sortedMachineIds.join(ARCHIVED_THREADS_ENVIRONMENT_KEY_SEPARATOR),
+    sortedMachineIds.join(ARCHIVED_THREADS_MACHINE_KEY_SEPARATOR),
   );
 }
 
-function parseArchivedThreadsEnvironmentKey(key: string): ReadonlyArray<MachineId> {
+function parseArchivedThreadsMachineKey(key: string): ReadonlyArray<MachineId> {
   if (key.length === 0) {
     return [];
   }
   return pipe(
-    key.split(ARCHIVED_THREADS_ENVIRONMENT_KEY_SEPARATOR),
+    key.split(ARCHIVED_THREADS_MACHINE_KEY_SEPARATOR),
     Arr.map((machineId) => MachineId.make(machineId)),
   );
 }
@@ -43,13 +43,13 @@ export function createArchivedThreadSnapshotsAtomFamily<E>(options: {
   ) => Atom.Atom<AsyncResult.AsyncResult<OrchestrationV2ArchivedShellSnapshot, E>>;
   readonly labelPrefix: string;
 }) {
-  return Atom.family((environmentKey: string) =>
+  return Atom.family((machineKey: string) =>
     Atom.make((get): ArchivedThreadSnapshotsState => {
       const snapshots: ArchivedSnapshotEntry[] = [];
       let error: string | null = null;
       let isLoading = false;
 
-      for (const machineId of parseArchivedThreadsEnvironmentKey(environmentKey)) {
+      for (const machineId of parseArchivedThreadsMachineKey(machineKey)) {
         const result = get(options.getSnapshotAtom(machineId));
         isLoading ||= result.waiting;
 
@@ -64,6 +64,6 @@ export function createArchivedThreadSnapshotsAtomFamily<E>(options: {
       }
 
       return { snapshots, error, isLoading };
-    }).pipe(Atom.withLabel(`${options.labelPrefix}:${environmentKey}`)),
+    }).pipe(Atom.withLabel(`${options.labelPrefix}:${machineKey}`)),
   );
 }

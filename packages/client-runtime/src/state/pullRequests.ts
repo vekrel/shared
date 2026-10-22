@@ -32,15 +32,15 @@ import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
 import {
   createAtomCommandScheduler,
-  createEnvironmentRpcCommand,
-  createEnvironmentRpcQueryAtomFamily,
-  createEnvironmentRpcSubscriptionAtomFamily,
-  createEnvironmentQueryAtomFamily,
+  createMachineRpcCommand,
+  createMachineRpcQueryAtomFamily,
+  createMachineRpcSubscriptionAtomFamily,
+  createMachineQueryAtomFamily,
 } from "./runtime.ts";
 import { createPullRequestRouter } from "./pullRequestRouting.ts";
 import * as PullRequestDiffLoader from "./pullRequestDiffHttp.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 
 export {
   type PullRequestDiffLoadError,
@@ -107,20 +107,20 @@ function updateCached<A, E>(
 }
 
 function createPullRequestRefreshAtomFamily<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  runtime: Atom.AtomRuntime<MachineRegistry | R, E>,
 ) {
-  return createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+  return createMachineRpcSubscriptionAtomFamily(runtime, {
     label: "machine-data:pull-requests:turn-refreshes",
     tag: WS_METHODS.pullRequestsSubscribeRefreshes,
   });
 }
 
 export function createLinkedPullRequestSummaryAtomFamily<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  runtime: Atom.AtomRuntime<MachineRegistry | R, E>,
   refreshes = createPullRequestRefreshAtomFamily(runtime),
 ) {
   const routedRequest = createPullRequestRouter();
-  return createEnvironmentRpcQueryAtomFamily(runtime, {
+  return createMachineRpcQueryAtomFamily(runtime, {
     label: "machine-data:pull-requests:linked-summary",
     tag: WS_METHODS.pullRequestsSummary,
     execute: (input) => routedRequest(WS_METHODS.pullRequestsSummary, input),
@@ -133,11 +133,11 @@ export function createLinkedPullRequestSummaryAtomFamily<R, E>(
 }
 
 export function createPullRequestStackAtomFamily<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  runtime: Atom.AtomRuntime<MachineRegistry | R, E>,
   refreshes = createPullRequestRefreshAtomFamily(runtime),
 ) {
   const routedRequest = createPullRequestRouter();
-  return createEnvironmentRpcQueryAtomFamily(runtime, {
+  return createMachineRpcQueryAtomFamily(runtime, {
     label: "machine-data:pull-requests:stack",
     tag: WS_METHODS.pullRequestsStack,
     execute: (input) => routedRequest(WS_METHODS.pullRequestsStack, input),
@@ -162,21 +162,21 @@ export function pullRequestDetailToVcsStatus(
   };
 }
 
-export function createPullRequestEnvironmentAtoms<R, E>(
+export function createPullRequestMachineAtoms<R, E>(
   runtime: Atom.AtomRuntime<
-    EnvironmentRegistry | PullRequestDiffLoader.PullRequestDiffLoader | R,
+    MachineRegistry | PullRequestDiffLoader.PullRequestDiffLoader | R,
     E
   >,
 ) {
   const refreshes = createPullRequestRefreshAtomFamily(runtime);
   const commandScheduler = createAtomCommandScheduler();
   const routedRequest = createPullRequestRouter();
-  const serialPerEnvironment = {
+  const serialPerMachine = {
     mode: "serial",
     key: ({ machineId }: { readonly machineId: string }) => machineId,
   } as const;
   const activity = writableQueryFamily(
-    createEnvironmentRpcQueryAtomFamily(runtime, {
+    createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:activity",
       persistence: persistQuery(PullRequestActivity),
       tag: WS_METHODS.pullRequestsActivity,
@@ -186,7 +186,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
     }),
   );
   const detail = writableQueryFamily(
-    createEnvironmentRpcQueryAtomFamily(runtime, {
+    createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:detail",
       persistence: persistQuery(PullRequestDetailSchema),
       tag: WS_METHODS.pullRequestsDetail,
@@ -196,7 +196,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
     }),
   );
   const preview = writableQueryFamily(
-    createEnvironmentRpcQueryAtomFamily(runtime, {
+    createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:preview",
       persistence: persistQuery(PullRequestPreview),
       tag: WS_METHODS.pullRequestsPreview,
@@ -206,7 +206,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
     }),
   );
   const labelCandidates = writableQueryFamily(
-    createEnvironmentRpcQueryAtomFamily(runtime, {
+    createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:label-candidates",
       tag: WS_METHODS.pullRequestsLabelCandidates,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsLabelCandidates, input),
@@ -214,7 +214,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
     }),
   );
   const reviewGuide = writableQueryFamily(
-    createEnvironmentRpcQueryAtomFamily(runtime, {
+    createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:review-guide",
       persistence: persistQuery(PullRequestReviewGuideResult),
       tag: WS_METHODS.pullRequestsReviewGuide,
@@ -224,7 +224,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
     }),
   );
   const reviewerCandidates = writableQueryFamily(
-    createEnvironmentRpcQueryAtomFamily(runtime, {
+    createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:reviewer-candidates",
       tag: WS_METHODS.pullRequestsReviewerCandidates,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsReviewerCandidates, input),
@@ -232,7 +232,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
     }),
   );
   const loadDiff = Effect.fn("PullRequests.loadDiff")(function* (input: PullRequestDiffInput) {
-    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const supervisor = yield* MachineSupervisor.MachineSupervisor;
     const loader = yield* PullRequestDiffLoader.PullRequestDiffLoader;
     const prepared = yield* SubscriptionRef.get(supervisor.prepared);
     if (Option.isNone(prepared)) {
@@ -289,7 +289,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
 
   return {
     refreshes,
-    linkedThreads: createEnvironmentRpcQueryAtomFamily(runtime, {
+    linkedThreads: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:linked-threads",
       persistence: persistQuery(PullRequestLinkedThreadsResult),
       tag: WS_METHODS.pullRequestsLinkedThreads,
@@ -297,7 +297,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
       refreshIntervalMs: 10_000,
       refreshTrigger: ({ machineId }) => refreshes({ machineId, input: {} }),
     }),
-    list: createEnvironmentRpcQueryAtomFamily(runtime, {
+    list: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:list",
       persistence: persistQuery(PullRequestListResult),
       tag: WS_METHODS.pullRequestsList,
@@ -310,7 +310,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
      * repositories, ~4.0s against ~7.1s — so the rows arrive first and their stats a moment
      * later.
      */
-    listStats: createEnvironmentRpcQueryAtomFamily(runtime, {
+    listStats: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:list-stats",
       persistence: persistPullRequestStats(),
       tag: WS_METHODS.pullRequestsListStats,
@@ -319,7 +319,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
     }),
     detail,
     preview,
-    checks: createEnvironmentRpcQueryAtomFamily(runtime, {
+    checks: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:checks",
       persistence: persistQuery(Schema.NullOr(PullRequestChecks)),
       tag: WS_METHODS.pullRequestsChecks,
@@ -328,7 +328,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
       refreshTrigger: ({ machineId }) => refreshes({ machineId, input: {} }),
     }),
     activity,
-    threadComments: createEnvironmentRpcCommand(runtime, {
+    threadComments: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:thread-comments",
       tag: WS_METHODS.pullRequestsThreadComments,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsThreadComments, input),
@@ -339,13 +339,13 @@ export function createPullRequestEnvironmentAtoms<R, E>(
           JSON.stringify([machineId, input.threadId, input.cursor]),
       },
     }),
-    diff: createEnvironmentQueryAtomFamily(runtime, {
+    diff: createMachineQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:diff",
       persistence: persistQuery(PullRequestDiffResult),
       staleTimeMs: 60_000,
       execute: loadDiff,
     }),
-    diffFileContents: createEnvironmentRpcCommand(runtime, {
+    diffFileContents: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:diff-file-contents",
       tag: WS_METHODS.pullRequestsDiffFileContents,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsDiffFileContents, input),
@@ -366,14 +366,14 @@ export function createPullRequestEnvironmentAtoms<R, E>(
           ]),
       },
     }),
-    filesViewed: createEnvironmentRpcQueryAtomFamily(runtime, {
+    filesViewed: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:files-viewed",
       persistence: persistQuery(PullRequestFilesViewedResult),
       tag: WS_METHODS.pullRequestsFilesViewed,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsFilesViewed, input),
       staleTimeMs: 15_000,
     }),
-    changeBreakdown: createEnvironmentRpcQueryAtomFamily(runtime, {
+    changeBreakdown: createMachineRpcQueryAtomFamily(runtime, {
       label: "machine-data:pull-requests:change-breakdown",
       persistence: persistQuery(PullRequestChangeBreakdown),
       tag: WS_METHODS.pullRequestsChangeBreakdown,
@@ -385,7 +385,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
      * One write in flight per change request: the host applies these in order, and a reader
      * ticking down a file list faster than the round trip would otherwise race their own presses.
      */
-    setFilesViewed: createEnvironmentRpcCommand(runtime, {
+    setFilesViewed: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:set-files-viewed",
       tag: WS_METHODS.pullRequestsSetFilesViewed,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsSetFilesViewed, input),
@@ -396,7 +396,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
           JSON.stringify([machineId, input.projectId, input.repository, input.number]),
       },
     }),
-    runAction: createEnvironmentRpcCommand(runtime, {
+    runAction: createMachineRpcCommand(runtime, {
       tag: WS_METHODS.pullRequestsRunAction,
       label: "machine-data:pull-requests:run-action",
       // Preparation belongs to the write's lane. Refreshable queries would restart it after
@@ -405,29 +405,29 @@ export function createPullRequestEnvironmentAtoms<R, E>(
       onSuccess: ({ machineId, input }, registry) =>
         Effect.sync(() => registry.refresh(preview({ machineId, input }))),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
     }),
-    update: createEnvironmentRpcCommand(runtime, {
+    update: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:update",
       tag: WS_METHODS.pullRequestsUpdate,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsUpdate, input),
       onSuccess: (target, registry) => Effect.sync(() => registry.refresh(preview(target))),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
     }),
-    comment: createEnvironmentRpcCommand(runtime, {
+    comment: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:comment",
       tag: WS_METHODS.pullRequestsComment,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsComment, input),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
     }),
-    updateComment: createEnvironmentRpcCommand(runtime, {
+    updateComment: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:update-comment",
       tag: WS_METHODS.pullRequestsUpdateComment,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsUpdateComment, input),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
       onSuccess: ({ machineId, input: { projectId, host, repository, number } }, registry) =>
         Effect.sync(() =>
           registry.refresh(
@@ -438,27 +438,27 @@ export function createPullRequestEnvironmentAtoms<R, E>(
           ),
         ),
     }),
-    submitReview: createEnvironmentRpcCommand(runtime, {
+    submitReview: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:submit-review",
       tag: WS_METHODS.pullRequestsSubmitReview,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsSubmitReview, input),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
     }),
-    replyToThread: createEnvironmentRpcCommand(runtime, {
+    replyToThread: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:reply-to-thread",
       tag: WS_METHODS.pullRequestsReplyToThread,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsReplyToThread, input),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
     }),
     reviewerCandidates,
-    requestReviewers: createEnvironmentRpcCommand(runtime, {
+    requestReviewers: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:request-reviewers",
       tag: WS_METHODS.pullRequestsRequestReviewers,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsRequestReviewers, input),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
       onSuccess: (target, registry) =>
         Effect.sync(() => {
           const { reviewers, requested } = target.input;
@@ -529,7 +529,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
         }),
     }),
     reviewGuide,
-    generateReviewGuide: createEnvironmentRpcCommand(runtime, {
+    generateReviewGuide: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:generate-review-guide",
       tag: WS_METHODS.pullRequestsGenerateReviewGuide,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsGenerateReviewGuide, input),
@@ -539,12 +539,12 @@ export function createPullRequestEnvironmentAtoms<R, E>(
         }),
     }),
     labelCandidates,
-    setLabels: createEnvironmentRpcCommand(runtime, {
+    setLabels: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:set-labels",
       tag: WS_METHODS.pullRequestsSetLabels,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsSetLabels, input),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
       onSuccess: (target, registry) =>
         Effect.sync(() => {
           const { labels, applied } = target.input;
@@ -575,25 +575,25 @@ export function createPullRequestEnvironmentAtoms<R, E>(
           }));
         }),
     }),
-    setThreadResolution: createEnvironmentRpcCommand(runtime, {
+    setThreadResolution: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:set-thread-resolution",
       tag: WS_METHODS.pullRequestsSetThreadResolution,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsSetThreadResolution, input),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
     }),
-    setReaction: createEnvironmentRpcCommand(runtime, {
+    setReaction: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:set-reaction",
       tag: WS_METHODS.pullRequestsSetReaction,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsSetReaction, input),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
     }),
     /**
      * A separate request rather than a flag on a read, so only a person's refresh spends
      * host requests while every silent re-read shares the cache.
      */
-    invalidate: createEnvironmentRpcCommand(runtime, {
+    invalidate: createMachineRpcCommand(runtime, {
       label: "machine-data:pull-requests:invalidate",
       tag: WS_METHODS.pullRequestsInvalidate,
       execute: (input) => routedRequest(WS_METHODS.pullRequestsInvalidate, input),
@@ -604,7 +604,7 @@ export function createPullRequestEnvironmentAtoms<R, E>(
           }
         }),
       scheduler: commandScheduler,
-      concurrency: serialPerEnvironment,
+      concurrency: serialPerMachine,
     }),
   };
 }

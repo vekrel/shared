@@ -29,10 +29,10 @@ import {
   PrimaryConnectionTarget,
   type PreparedConnection,
 } from "../connection/model.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
 import * as RpcSession from "./session.ts";
-import { makeEnvironmentServerConfigState } from "../state/server.ts";
+import { makeMachineServerConfigState } from "../state/server.ts";
 import { applyServerConfigProjection } from "../state/serverConfigProjection.ts";
 
 type SocketEventType = "open" | "message" | "close" | "error";
@@ -752,7 +752,7 @@ describe("RpcSessionFactory", () => {
           yield* Fiber.join(firstReady);
 
           const activeSession = yield* SubscriptionRef.make(Option.some(firstSession));
-          const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+          const supervisor = MachineSupervisor.MachineSupervisor.of({
             target: TARGET,
             state: yield* SubscriptionRef.make(AVAILABLE_CONNECTION_STATE),
             session: activeSession,
@@ -760,8 +760,8 @@ describe("RpcSessionFactory", () => {
             connect: Effect.void,
             disconnect: Effect.void,
             retryNow: Effect.void,
-          } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
-          const cache = Persistence.EnvironmentCacheStore.of({
+          } satisfies MachineSupervisor.MachineSupervisor["Service"]);
+          const cache = Persistence.MachineCacheStore.of({
             loadShell: () => Effect.succeedNone,
             saveShell: () => Effect.void,
             loadThread: () => Effect.succeedNone,
@@ -775,11 +775,11 @@ describe("RpcSessionFactory", () => {
             clearVcsRefs: () => Effect.void,
             clear: () => Effect.void,
           });
-          const configState = yield* makeEnvironmentServerConfigState({
+          const configState = yield* makeMachineServerConfigState({
             machineThemes: true,
           }).pipe(
-            Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-            Effect.provideService(Persistence.EnvironmentCacheStore, cache),
+            Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor),
+            Effect.provideService(Persistence.MachineCacheStore, cache),
           );
           const awaitConfig = (predicate: (config: ServerConfigType) => boolean) =>
             SubscriptionRef.changes(configState).pipe(

@@ -1,6 +1,6 @@
 import type { ProjectId } from "@vekrel/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@vekrel/contracts/settings";
-import type { EnvironmentThreadShell } from "./models.ts";
+import type { MachineThreadShell } from "./models.ts";
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 
@@ -21,7 +21,7 @@ export function toSortableTimestamp(iso: string | undefined): number | null {
 }
 
 export type SettledThreadTimestampInput = Pick<
-  EnvironmentThreadShell,
+  MachineThreadShell,
   "settledAt" | "latestUserMessageAt" | "latestRun" | "updatedAt"
 >;
 

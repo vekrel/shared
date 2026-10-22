@@ -1,7 +1,7 @@
 import type { HostResourcesSnapshot } from "@vekrel/contracts";
 
 /** Callers supply only connected machines hosting the project and selected provider. */
-export function chooseLoadBalancedEnvironment(
+export function chooseLoadBalancedMachine(
   candidates: ReadonlyArray<{
     machineId: string;
     resources: HostResourcesSnapshot | null;

@@ -25,8 +25,8 @@ import {
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineRegistry from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
@@ -98,7 +98,7 @@ function progress<T extends GitActionProgressEvent>(event: T): T {
 }
 
 function cacheStore(onClearVcsRefs: (machineId: MachineId) => void) {
-  return Persistence.EnvironmentCacheStore.of({
+  return Persistence.MachineCacheStore.of({
     loadShell: () => Effect.succeedNone,
     saveShell: () => Effect.void,
     loadThread: () => Effect.succeedNone,
@@ -379,7 +379,7 @@ describe("vcsActionState", () => {
 
   it("tracks finite mutations without letting an older completion clear newer state", async () => {
     const runtime = Atom.runtime(Layer.empty) as unknown as Atom.AtomRuntime<
-      EnvironmentRegistry.EnvironmentRegistry | Persistence.EnvironmentCacheStore,
+      MachineRegistry.MachineRegistry | Persistence.MachineCacheStore,
       never
     >;
     const manager = createVcsActionManager(runtime);
@@ -481,7 +481,7 @@ describe("vcsActionState", () => {
                     }),
                   ),
         } as unknown as WsRpcProtocolClient;
-        const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        const supervisor = MachineSupervisor.MachineSupervisor.of({
           target,
           state: yield* SubscriptionRef.make(connectionState),
           session: yield* SubscriptionRef.make(Option.some(session(client))),
@@ -489,25 +489,25 @@ describe("vcsActionState", () => {
           connect: Effect.void,
           disconnect: Effect.void,
           retryNow: Effect.void,
-        } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
-        const run: EnvironmentRegistry.EnvironmentRegistry["Service"]["run"] = (
-          _environmentId,
+        } satisfies MachineSupervisor.MachineSupervisor["Service"]);
+        const run: MachineRegistry.MachineRegistry["Service"]["run"] = (
+          _machineId,
           effect,
-        ) => Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
-        const runStream: EnvironmentRegistry.EnvironmentRegistry["Service"]["runStream"] = (
-          _environmentId,
+        ) => Effect.provideService(effect, MachineSupervisor.MachineSupervisor, supervisor);
+        const runStream: MachineRegistry.MachineRegistry["Service"]["runStream"] = (
+          _machineId,
           stream,
-        ) => Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
-        const environmentRegistry = EnvironmentRegistry.EnvironmentRegistry.of({
+        ) => Stream.provideService(stream, MachineSupervisor.MachineSupervisor, supervisor);
+        const machineRegistry = MachineRegistry.MachineRegistry.of({
           run,
           runStream,
-        } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"]);
+        } as unknown as MachineRegistry.MachineRegistry["Service"]);
         const removed = new Array<string>();
         const runtime = Atom.runtime(
           Layer.merge(
-            Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+            Layer.succeed(MachineRegistry.MachineRegistry, machineRegistry),
             Layer.succeed(
-              Persistence.EnvironmentCacheStore,
+              Persistence.MachineCacheStore,
               cacheStore((removedMachineId) => {
                 removed.push(`${removedMachineId}:*`);
               }),
@@ -577,7 +577,7 @@ describe("vcsActionState", () => {
 });
 
 vi.mock("./session.ts", () => ({
-  createEnvironmentSessionAtoms: () => ({ sessionStateAtom: grantedSessions }),
+  createMachineSessionAtoms: () => ({ sessionStateAtom: grantedSessions }),
 }));
 const grantedSessions = Atom.family((_id: MachineId) =>
   Atom.make(

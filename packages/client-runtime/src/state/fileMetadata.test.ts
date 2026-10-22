@@ -20,8 +20,8 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import { Atom, AtomRegistry } from "effect/reactivity";
 
 import { AVAILABLE_CONNECTION_STATE } from "../connection/model.ts";
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineRegistry from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import { createFileMetadataAtoms } from "./fileMetadata.ts";
 
@@ -59,32 +59,32 @@ const makeHarness = Effect.fnUntraced(function* () {
     target: { machineId: MACHINE_ID },
     session,
     state,
-  } as EnvironmentSupervisor.EnvironmentSupervisor["Service"];
+  } as MachineSupervisor.MachineSupervisor["Service"];
   const otherSupervisor = {
     ...supervisor,
     target: { machineId: OTHER_MACHINE_ID },
     session: yield* SubscriptionRef.make(Option.some(makeSession())),
-  } as EnvironmentSupervisor.EnvironmentSupervisor["Service"];
+  } as MachineSupervisor.MachineSupervisor["Service"];
   const getSupervisor = (machineId: MachineId) =>
     machineId === OTHER_MACHINE_ID ? otherSupervisor : supervisor;
-  const environmentRegistry = {
+  const machineRegistry = {
     run: (machineId, effect) =>
       Effect.provideService(
         effect,
-        EnvironmentSupervisor.EnvironmentSupervisor,
+        MachineSupervisor.MachineSupervisor,
         getSupervisor(machineId),
       ),
     followStream: (machineId, stream) =>
       Stream.provideService(
         stream,
-        EnvironmentSupervisor.EnvironmentSupervisor,
+        MachineSupervisor.MachineSupervisor,
         getSupervisor(machineId),
       ),
-  } as EnvironmentRegistry.EnvironmentRegistry["Service"];
+  } as MachineRegistry.MachineRegistry["Service"];
   const clock = yield* Clock.Clock;
   const runtime = Atom.runtime(
     Layer.merge(
-      Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+      Layer.succeed(MachineRegistry.MachineRegistry, machineRegistry),
       Layer.succeed(Clock.Clock, clock),
     ),
   );
@@ -100,7 +100,7 @@ const makeHarness = Effect.fnUntraced(function* () {
   const seed = (path: string, kind: "file" | "directory") =>
     atoms
       .rememberEntries("/workspace", [{ path, kind }])
-      .pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+      .pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, supervisor));
   return {
     batches,
     values,
@@ -130,7 +130,7 @@ describe("file metadata", () => {
           relativePath: "/workspace/read:12:3",
           byteLength: 100,
         })
-        .pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, h.supervisor));
+        .pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, h.supervisor));
       expect(yield* h.read("/workspace/read:12:3")).toEqual({ kind: "file", byteLength: 100 });
       expect(yield* h.read("/workspace/read")).toBeNull();
       expect(h.batches).toEqual([["/workspace/report"], ["/workspace/read"]]);
@@ -156,7 +156,7 @@ describe("file metadata", () => {
       yield* Deferred.await(started);
       yield* h.atoms
         .invalidate("/workspace/file")
-        .pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, h.supervisor));
+        .pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, h.supervisor));
       h.values.set("/workspace/file", { kind: "file", byteLength: 10 });
       h.response.wait = Effect.void;
       yield* Deferred.succeed(release, undefined);
@@ -182,7 +182,7 @@ describe("file metadata", () => {
       yield* h.read("/workspace/file", MACHINE_ID, threadId);
       yield* h.atoms
         .invalidate("/workspace/file")
-        .pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, h.supervisor));
+        .pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, h.supervisor));
       h.atoms.refreshPath(MACHINE_ID, "/workspace/file", h.registry);
       yield* Effect.yieldNow;
       expect(h.batches).toHaveLength(1);
@@ -208,7 +208,7 @@ describe("file metadata", () => {
       h.values.set("/workspace/file", { kind: "file", byteLength: 10 });
       yield* h.atoms
         .invalidate("/workspace/file")
-        .pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, h.supervisor));
+        .pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, h.supervisor));
       h.atoms.refreshPath(MACHINE_ID, "/workspace/file", h.registry);
       expect(yield* h.read("/workspace/file", MACHINE_ID, threadId)).toEqual({
         kind: "file",
@@ -275,7 +275,7 @@ describe("file metadata", () => {
           relativePath: "file",
           byteLength: 100,
         })
-        .pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, h.supervisor));
+        .pipe(Effect.provideService(MachineSupervisor.MachineSupervisor, h.supervisor));
       expect(yield* h.read("c:/workspace/file/")).toEqual({ kind: "file", byteLength: 100 });
       expect(h.batches).toHaveLength(0);
     }).pipe(Effect.scoped),

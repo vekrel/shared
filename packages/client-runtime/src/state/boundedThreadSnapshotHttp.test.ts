@@ -191,14 +191,14 @@ describe("boundedThreadSnapshotLoader", () => {
     );
   });
 
-  it.effect("treats structured EnvironmentResourceNotFoundError from bounded as missing", () => {
+  it.effect("treats structured MachineResourceNotFoundError from bounded as missing", () => {
     const fetchFn = ((input: RequestInfo | URL) => {
       const url = String(input);
       expect(url).toContain(`/api/orchestration/threads/${THREAD_ID}/bounded`);
       return Promise.resolve(
         Response.json(
           {
-            _tag: "EnvironmentResourceNotFoundError",
+            _tag: "MachineResourceNotFoundError",
             code: "not_found",
             reason: "thread_not_found",
             traceId: "trace-bounded-missing",

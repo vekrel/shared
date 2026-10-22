@@ -5,7 +5,7 @@ import {
 } from "@vekrel/contracts/relay";
 import { describe, expect, it } from "@effect/vitest";
 
-import { mapManagedRelayError, mapRemoteDpopEnvironmentError } from "./errors.ts";
+import { mapManagedRelayError, mapRemoteDpopMachineError } from "./errors.ts";
 import { DPOP_UNKNOWN_HINT } from "../relay/errorPresentation.ts";
 import { ManagedRelayRequestFailedError } from "../relay/managedRelay.ts";
 import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
@@ -87,7 +87,7 @@ describe("mapManagedRelayError", () => {
   });
 });
 
-describe("mapRemoteDpopEnvironmentError", () => {
+describe("mapRemoteDpopMachineError", () => {
   it.each([
     new RemoteMachineAuthFetchError({
       message: "Failed to fetch remote machine endpoint.",
@@ -95,7 +95,7 @@ describe("mapRemoteDpopEnvironmentError", () => {
     }),
     new RemoteMachineAuthTimeoutError("https://machine.example.test", 10_000),
   ])("suggests another network when the relay endpoint cannot be reached: $_tag", (error) => {
-    const mapped = mapRemoteDpopEnvironmentError(error);
+    const mapped = mapRemoteDpopMachineError(error);
     expect(mapped).toMatchObject({
       _tag: "ConnectionTransientError",
       detail: `${error.message} ${NETWORK_BLOCKING_HINT}`,

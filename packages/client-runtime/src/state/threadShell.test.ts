@@ -16,14 +16,14 @@ import { PrimaryConnectionTarget } from "../connection/model.ts";
 import { v2Now, v2ShellSnapshot, v2ThreadShell } from "./orchestrationV2TestFixtures.ts";
 import { applyShellStreamEvent } from "./shellReducer.ts";
 import { isThreadWorking } from "./threadInbox.ts";
-import { childThreadInputsTitle, createEnvironmentThreadShellAtoms } from "./threadShell.ts";
+import { childThreadInputsTitle, createMachineThreadShellAtoms } from "./threadShell.ts";
 
 const machineId = MachineId.make("machine-v2");
 const remoteMachineId = MachineId.make("remote-machine-v2");
 const otherProjectId = ProjectId.make("other-project");
 
 function makeHarness(machineIds: ReadonlyArray<MachineId> = [machineId]) {
-  const snapshotAtom = Atom.family((_environmentId: MachineId) =>
+  const snapshotAtom = Atom.family((_machineId: MachineId) =>
     Atom.make<OrchestrationV2ShellSnapshot | null>(v2ShellSnapshot),
   );
   const catalogValueAtom = Atom.make({
@@ -48,7 +48,7 @@ function makeHarness(machineIds: ReadonlyArray<MachineId> = [machineId]) {
     registry: AtomRegistry.make(),
     snapshotAtom,
     catalogValueAtom,
-    threads: createEnvironmentThreadShellAtoms({ catalogValueAtom, snapshotAtom }),
+    threads: createMachineThreadShellAtoms({ catalogValueAtom, snapshotAtom }),
   };
 }
 
@@ -227,9 +227,9 @@ describe("v2 thread shell lists", () => {
       remoteMachineId,
     ]);
     const dispose = registry.mount(threads.navigationThreadShellsAtom);
-    const environmentsOf = () =>
+    const machinesOf = () =>
       new Set(registry.get(threads.navigationThreadShellsAtom).map((t) => t.machineId));
-    expect(environmentsOf()).toEqual(new Set([machineId, remoteMachineId]));
+    expect(machinesOf()).toEqual(new Set([machineId, remoteMachineId]));
 
     const setRemotePaused = (paused: boolean) => {
       const catalog = registry.get(catalogValueAtom);
@@ -241,9 +241,9 @@ describe("v2 thread shell lists", () => {
       registry.set(catalogValueAtom, { ...catalog, entries });
     };
     setRemotePaused(true);
-    expect(environmentsOf()).toEqual(new Set([machineId]));
+    expect(machinesOf()).toEqual(new Set([machineId]));
     setRemotePaused(false);
-    expect(environmentsOf()).toEqual(new Set([machineId, remoteMachineId]));
+    expect(machinesOf()).toEqual(new Set([machineId, remoteMachineId]));
     dispose();
     registry.dispose();
   });
@@ -257,7 +257,7 @@ describe("v2 thread shell lists", () => {
     };
     const snapshot = { ...v2ShellSnapshot, threads: [v2ThreadShell, otherThread] };
     harness.registry.set(harness.snapshotAtom(machineId), snapshot);
-    const membershipAtom = harness.threads.environmentThreadRefsByProjectAtom(machineId);
+    const membershipAtom = harness.threads.machineThreadRefsByProjectAtom(machineId);
     const listAtom = harness.threads.threadShellsForProjectRefsAtom([
       { machineId: remoteMachineId, projectId: v2ThreadShell.projectId },
       { machineId, projectId: v2ThreadShell.projectId },

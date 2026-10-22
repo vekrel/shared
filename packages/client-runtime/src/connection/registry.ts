@@ -36,7 +36,7 @@ import type {
 } from "./model.ts";
 import { ConnectionBlockedError } from "./model.ts";
 import * as Persistence from "../platform/persistence.ts";
-import * as EnvironmentSupervisor from "./supervisor.ts";
+import * as MachineSupervisor from "./supervisor.ts";
 import * as ConnectionDriver from "./driver.ts";
 import * as ConnectionWakeups from "./wakeups.ts";
 import {
@@ -70,8 +70,8 @@ function unsupportedState(
   };
 }
 
-export class EnvironmentNotRegisteredError extends Schema.TaggedError<EnvironmentNotRegisteredError>()(
-  "EnvironmentNotRegisteredError",
+export class MachineNotRegisteredError extends Schema.TaggedError<MachineNotRegisteredError>()(
+  "MachineNotRegisteredError",
   {
     machineId: MachineId,
   },
@@ -81,8 +81,8 @@ export class EnvironmentNotRegisteredError extends Schema.TaggedError<Environmen
   }
 }
 
-export class PlatformEnvironmentRemovalError extends Schema.TaggedError<PlatformEnvironmentRemovalError>()(
-  "PlatformEnvironmentRemovalError",
+export class PlatformMachineRemovalError extends Schema.TaggedError<PlatformMachineRemovalError>()(
+  "PlatformMachineRemovalError",
   {
     machineId: MachineId,
   },
@@ -92,8 +92,8 @@ export class PlatformEnvironmentRemovalError extends Schema.TaggedError<Platform
   }
 }
 
-export class EnvironmentRegistry extends Context.Service<
-  EnvironmentRegistry,
+export class MachineRegistry extends Context.Service<
+  MachineRegistry,
   {
     readonly entries: SubscriptionRef.SubscriptionRef<
       ReadonlyMap<MachineId, ConnectionCatalogEntry>
@@ -117,8 +117,8 @@ export class EnvironmentRegistry extends Context.Service<
       void,
       | Persistence.ConnectionPersistenceError
       | ConnectionAttemptError
-      | EnvironmentNotRegisteredError
-      | PlatformEnvironmentRemovalError
+      | MachineNotRegisteredError
+      | PlatformMachineRemovalError
     >;
     /**
      * Removing a machine's last route removes the machine, the same as
@@ -131,8 +131,8 @@ export class EnvironmentRegistry extends Context.Service<
       void,
       | Persistence.ConnectionPersistenceError
       | ConnectionAttemptError
-      | EnvironmentNotRegisteredError
-      | PlatformEnvironmentRemovalError
+      | MachineNotRegisteredError
+      | PlatformMachineRemovalError
     >;
     readonly reorderRoutes: (
       machineId: MachineId,
@@ -140,15 +140,15 @@ export class EnvironmentRegistry extends Context.Service<
     ) => Effect.Effect<
       void,
       | Persistence.ConnectionPersistenceError
-      | EnvironmentNotRegisteredError
-      | PlatformEnvironmentRemovalError
+      | MachineNotRegisteredError
+      | PlatformMachineRemovalError
       | ConnectionBlockedError
     >;
     readonly removeRelayMachines: () => Effect.Effect<
       void,
       | Persistence.ConnectionPersistenceError
       | ConnectionAttemptError
-      | PlatformEnvironmentRemovalError
+      | PlatformMachineRemovalError
     >;
     readonly retryNow: (machineId: MachineId) => Effect.Effect<void>;
     readonly setEnabled: (
@@ -156,7 +156,7 @@ export class EnvironmentRegistry extends Context.Service<
       enabled: boolean,
     ) => Effect.Effect<
       void,
-      | EnvironmentNotRegisteredError
+      | MachineNotRegisteredError
       | Persistence.ConnectionPersistenceError
       | ConnectionBlockedError
     >;
@@ -166,36 +166,36 @@ export class EnvironmentRegistry extends Context.Service<
     ) => Effect.Effect<void, Persistence.ConnectionPersistenceError>;
     readonly state: (
       machineId: MachineId,
-    ) => Effect.Effect<SupervisorConnectionState, EnvironmentNotRegisteredError>;
+    ) => Effect.Effect<SupervisorConnectionState, MachineNotRegisteredError>;
     readonly stateChanges: (
       machineId: MachineId,
-    ) => Stream.Stream<SupervisorConnectionState, EnvironmentNotRegisteredError>;
+    ) => Stream.Stream<SupervisorConnectionState, MachineNotRegisteredError>;
     readonly run: <A, E, R>(
       machineId: MachineId,
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<
       A,
-      E | EnvironmentNotRegisteredError,
-      Exclude<R, EnvironmentSupervisor.EnvironmentSupervisor>
+      E | MachineNotRegisteredError,
+      Exclude<R, MachineSupervisor.MachineSupervisor>
     >;
     readonly runStream: <A, E, R>(
       machineId: MachineId,
       stream: Stream.Stream<A, E, R>,
     ) => Stream.Stream<
       A,
-      E | EnvironmentNotRegisteredError,
-      Exclude<R, EnvironmentSupervisor.EnvironmentSupervisor>
+      E | MachineNotRegisteredError,
+      Exclude<R, MachineSupervisor.MachineSupervisor>
     >;
     readonly followStream: <A, E, R>(
       machineId: MachineId,
       stream: Stream.Stream<A, E, R>,
-    ) => Stream.Stream<A, E, Exclude<R, EnvironmentSupervisor.EnvironmentSupervisor>>;
+    ) => Stream.Stream<A, E, Exclude<R, MachineSupervisor.MachineSupervisor>>;
   }
->()("@vekrel/client-runtime/connection/registry/EnvironmentRegistry") {}
+>()("@vekrel/client-runtime/connection/registry/MachineRegistry") {}
 
-interface EnvironmentServiceScope {
+interface MachineServiceScope {
   readonly entry: ConnectionCatalogEntry;
-  readonly supervisor: EnvironmentSupervisor.EnvironmentSupervisor["Service"];
+  readonly supervisor: MachineSupervisor.MachineSupervisor["Service"];
   readonly scope: Scope.Closeable;
 }
 
@@ -204,8 +204,8 @@ export const make = Effect.gen(function* () {
   const registryScope = yield* Scope.Scope;
   const storage = yield* Persistence.ConnectionTargetStore;
   const registrations = yield* Persistence.ConnectionRegistrationStore;
-  const cache = yield* Persistence.EnvironmentCacheStore;
-  const ownedDataCleanup = yield* Persistence.EnvironmentOwnedDataCleanup;
+  const cache = yield* Persistence.MachineCacheStore;
+  const ownedDataCleanup = yield* Persistence.MachineOwnedDataCleanup;
   const profiles = yield* ConnectionProfileStore.ConnectionProfileStore;
   const credentials = yield* ConnectionCredentialStore.ConnectionCredentialStore;
   const githubRoutingPermissions = yield* GitHubRoutingPermissions;
@@ -215,7 +215,7 @@ export const make = Effect.gen(function* () {
   const ssh = yield* ClientCapabilities.SshMachineGateway;
   const persistedTargets = yield* storage.list;
   const disabledMachineIds = new Set(yield* storage.listDisabled);
-  const loadRoute = Effect.fn("EnvironmentRegistry.loadRoute")(function* (
+  const loadRoute = Effect.fn("MachineRegistry.loadRoute")(function* (
     target: ConnectionTarget,
   ) {
     const profile: Option.Option<ConnectionProfile> =
@@ -224,16 +224,16 @@ export const make = Effect.gen(function* () {
         : Option.none();
     return { target, profile } satisfies ConnectionRoute;
   });
-  const persistedRoutesByEnvironment = new Map<MachineId, Array<ConnectionTarget>>();
+  const persistedRoutesByMachine = new Map<MachineId, Array<ConnectionTarget>>();
   for (const target of persistedTargets) {
-    const routes = persistedRoutesByEnvironment.get(target.machineId) ?? [];
+    const routes = persistedRoutesByMachine.get(target.machineId) ?? [];
     routes.push(target);
-    persistedRoutesByEnvironment.set(target.machineId, routes);
+    persistedRoutesByMachine.set(target.machineId, routes);
   }
   const initialEntries = new Map(
     yield* Effect.forEach(
-      persistedRoutesByEnvironment,
-      Effect.fn("EnvironmentRegistry.loadCatalogEntry")(function* ([machineId, targets]) {
+      persistedRoutesByMachine,
+      Effect.fn("MachineRegistry.loadCatalogEntry")(function* ([machineId, targets]) {
         const loaded = yield* Effect.forEach(targets, loadRoute, { concurrency: "unbounded" });
         const seen = new Set<string>();
         const usable = loaded.filter((route) => {
@@ -263,11 +263,11 @@ export const make = Effect.gen(function* () {
     yield* SubscriptionRef.make<ReadonlyMap<MachineId, ConnectionCatalogEntry>>(initialEntries);
   const networkStatus = yield* SubscriptionRef.make(yield* connectivity.status);
   const serviceScopes = yield* SubscriptionRef.make<
-    ReadonlyMap<MachineId, EnvironmentServiceScope>
+    ReadonlyMap<MachineId, MachineServiceScope>
   >(new Map());
   const platformMachineIds = yield* Ref.make<ReadonlySet<MachineId>>(new Set());
   const persistedMachineIds = yield* Ref.make<ReadonlySet<MachineId>>(
-    new Set(persistedRoutesByEnvironment.keys()),
+    new Set(persistedRoutesByMachine.keys()),
   );
   interface LeaseLock {
     readonly semaphore: Semaphore.Semaphore;
@@ -322,21 +322,21 @@ export const make = Effect.gen(function* () {
             return next;
           }),
         ),
-    ).pipe(Effect.withSpan("EnvironmentRegistry.withLeaseLock"));
+    ).pipe(Effect.withSpan("MachineRegistry.withLeaseLock"));
 
-  const getEntry = Effect.fn("EnvironmentRegistry.getEntry")(function* (
+  const getEntry = Effect.fn("MachineRegistry.getEntry")(function* (
     machineId: MachineId,
   ) {
     const entry = (yield* SubscriptionRef.get(entries)).get(machineId);
     if (entry === undefined) {
-      return yield* new EnvironmentNotRegisteredError({
+      return yield* new MachineNotRegisteredError({
         machineId,
       });
     }
     return entry;
   });
 
-  const closeServiceScope = Effect.fn("EnvironmentRegistry.closeServiceScope")(function* (
+  const closeServiceScope = Effect.fn("MachineRegistry.closeServiceScope")(function* (
     machineId: MachineId,
   ) {
     const current = yield* SubscriptionRef.get(serviceScopes);
@@ -350,13 +350,13 @@ export const make = Effect.gen(function* () {
     yield* Scope.close(lease.scope, Exit.void);
   });
 
-  const createServiceScope = Effect.fn("EnvironmentRegistry.createServiceScope")(
+  const createServiceScope = Effect.fn("MachineRegistry.createServiceScope")(
     (entry: ConnectionCatalogEntry) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const machineId = entry.target.machineId;
           const scope = yield* Scope.fork(registryScope);
-          const supervisor = yield* EnvironmentSupervisor.make(entry, {
+          const supervisor = yield* MachineSupervisor.make(entry, {
             // Seed the intent to avoid publishing a false switched-off state
             // before an enabled, compatible machine starts connecting.
             initiallyDesired: entry.enabled && entry.unsupportedReason === undefined,
@@ -386,7 +386,7 @@ export const make = Effect.gen(function* () {
       ),
   );
 
-  const acquireSupervisor = Effect.fn("EnvironmentRegistry.acquireSupervisor")(function* (
+  const acquireSupervisor = Effect.fn("MachineRegistry.acquireSupervisor")(function* (
     machineId: MachineId,
   ) {
     return yield* withLeaseLock(
@@ -405,30 +405,30 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const run: EnvironmentRegistry["Service"]["run"] = Effect.fn("EnvironmentRegistry.run")(
+  const run: MachineRegistry["Service"]["run"] = Effect.fn("MachineRegistry.run")(
     function* <A, E, R>(machineId: MachineId, effect: Effect.Effect<A, E, R>) {
       const supervisor = yield* acquireSupervisor(machineId);
       return yield* Effect.provideService(
         effect,
-        EnvironmentSupervisor.EnvironmentSupervisor,
+        MachineSupervisor.MachineSupervisor,
         supervisor,
       );
     },
   );
 
-  const runStream: EnvironmentRegistry["Service"]["runStream"] = <A, E, R>(
+  const runStream: MachineRegistry["Service"]["runStream"] = <A, E, R>(
     machineId: MachineId,
     stream: Stream.Stream<A, E, R>,
   ) =>
     Stream.unwrap(
       acquireSupervisor(machineId).pipe(
         Effect.map((supervisor) =>
-          Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+          Stream.provideService(stream, MachineSupervisor.MachineSupervisor, supervisor),
         ),
       ),
     );
 
-  const followStream: EnvironmentRegistry["Service"]["followStream"] = <A, E, R>(
+  const followStream: MachineRegistry["Service"]["followStream"] = <A, E, R>(
     machineId: MachineId,
     stream: Stream.Stream<A, E, R>,
   ) =>
@@ -451,7 +451,7 @@ export const make = Effect.gen(function* () {
                   onSuccess: (supervisor) =>
                     Stream.provideService(
                       stream,
-                      EnvironmentSupervisor.EnvironmentSupervisor,
+                      MachineSupervisor.MachineSupervisor,
                       supervisor,
                     ),
                 }),
@@ -466,19 +466,19 @@ export const make = Effect.gen(function* () {
       return;
     }
     yield* Effect.forEach(
-      persistedRoutesByEnvironment.keys(),
+      persistedRoutesByMachine.keys(),
       (machineId) =>
         acquireSupervisor(machineId).pipe(
-          Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }),
+          Effect.catchTags({ MachineNotRegisteredError: () => Effect.void }),
         ),
       {
         concurrency: "unbounded",
         discard: true,
       },
     );
-  }).pipe(Effect.withSpan("EnvironmentRegistry.start"));
+  }).pipe(Effect.withSpan("MachineRegistry.start"));
 
-  const installEntryLocked = Effect.fn("EnvironmentRegistry.installEntryLocked")(function* (
+  const installEntryLocked = Effect.fn("MachineRegistry.installEntryLocked")(function* (
     entry: ConnectionCatalogEntry,
     options?: { readonly retainEquivalentRuntime?: boolean },
   ) {
@@ -534,7 +534,7 @@ export const make = Effect.gen(function* () {
     return { entry: rest, addressesChanged: true };
   };
 
-  const register = Effect.fn("EnvironmentRegistry.register")(function* (
+  const register = Effect.fn("MachineRegistry.register")(function* (
     registration: ConnectionRegistration,
   ) {
     const registered = connectionRegistrationCatalogEntry(registration);
@@ -572,7 +572,7 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const replaceRoutesLocked = Effect.fn("EnvironmentRegistry.replaceRoutesLocked")(function* (
+  const replaceRoutesLocked = Effect.fn("MachineRegistry.replaceRoutesLocked")(function* (
     previous: ConnectionCatalogEntry,
     routes: ReadonlyArray<ConnectionRoute>,
   ) {
@@ -585,16 +585,16 @@ export const make = Effect.gen(function* () {
     yield* installEntryLocked(next.entry);
   });
 
-  const userEntry = Effect.fn("EnvironmentRegistry.userEntry")(function* (
+  const userEntry = Effect.fn("MachineRegistry.userEntry")(function* (
     machineId: MachineId,
   ) {
     if ((yield* Ref.get(platformMachineIds)).has(machineId)) {
-      return yield* new PlatformEnvironmentRemovalError({ machineId });
+      return yield* new PlatformMachineRemovalError({ machineId });
     }
     return yield* getEntry(machineId);
   });
 
-  const installPlatformRegistration = Effect.fn("EnvironmentRegistry.installPlatformRegistration")(
+  const installPlatformRegistration = Effect.fn("MachineRegistry.installPlatformRegistration")(
     function* (registration: PlatformConnectionRegistration) {
       const registered = connectionRegistrationCatalogEntry(registration);
       const target = registered.target;
@@ -719,7 +719,7 @@ export const make = Effect.gen(function* () {
     },
   );
 
-  const removePlatformEnvironment = Effect.fn("EnvironmentRegistry.removePlatformEnvironment")(
+  const removePlatformMachine = Effect.fn("MachineRegistry.removePlatformMachine")(
     function* (machineId: MachineId) {
       yield* withLeaseLock(
         machineId,
@@ -778,13 +778,13 @@ export const make = Effect.gen(function* () {
     },
   );
 
-  const registerPlatform = Effect.fn("EnvironmentRegistry.registerPlatform")(function* (
+  const registerPlatform = Effect.fn("MachineRegistry.registerPlatform")(function* (
     registration: PrimaryConnectionRegistration,
   ) {
     yield* installPlatformRegistration(registration);
   });
 
-  const reconcilePlatform = Effect.fn("EnvironmentRegistry.reconcilePlatform")(function* (
+  const reconcilePlatform = Effect.fn("MachineRegistry.reconcilePlatform")(function* (
     platformRegistrations: ReadonlyArray<PlatformConnectionRegistration>,
   ) {
     const desiredIds = new Set(
@@ -794,18 +794,18 @@ export const make = Effect.gen(function* () {
     yield* Effect.forEach(
       currentPlatformIds,
       (machineId) =>
-        desiredIds.has(machineId) ? Effect.void : removePlatformEnvironment(machineId),
+        desiredIds.has(machineId) ? Effect.void : removePlatformMachine(machineId),
       { discard: true },
     );
     yield* Effect.forEach(platformRegistrations, installPlatformRegistration, { discard: true });
   });
 
   /** Callers hold its lease lock. */
-  const removeLocked = Effect.fn("EnvironmentRegistry.removeLocked")(function* (
+  const removeLocked = Effect.fn("MachineRegistry.removeLocked")(function* (
     machineId: MachineId,
   ) {
     if ((yield* Ref.get(platformMachineIds)).has(machineId)) {
-      return yield* new PlatformEnvironmentRemovalError({
+      return yield* new PlatformMachineRemovalError({
         machineId,
       });
     }
@@ -847,7 +847,7 @@ export const make = Effect.gen(function* () {
     }
   });
 
-  const remove = Effect.fn("EnvironmentRegistry.remove")(function* (machineId: MachineId) {
+  const remove = Effect.fn("MachineRegistry.remove")(function* (machineId: MachineId) {
     return yield* withLeaseLock(machineId, removeLocked(machineId));
   });
 
@@ -870,7 +870,7 @@ export const make = Effect.gen(function* () {
    * Learned routes reuse the active route's credential, so they do not revoke GitHub routing
    * trust the way a newly paired address does.
    */
-  const learnRoutes = Effect.fn("EnvironmentRegistry.learnRoutes")(function* (input: {
+  const learnRoutes = Effect.fn("MachineRegistry.learnRoutes")(function* (input: {
     readonly machineId: MachineId;
     readonly activeRoute: ConnectionRoute;
     readonly reported: ReadonlyArray<ReportedEndpoint>;
@@ -929,7 +929,7 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const removeRoute = Effect.fn("EnvironmentRegistry.removeRoute")(function* (
+  const removeRoute = Effect.fn("MachineRegistry.removeRoute")(function* (
     machineId: MachineId,
     routeId: string,
   ) {
@@ -953,7 +953,7 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const reorderRoutes = Effect.fn("EnvironmentRegistry.reorderRoutes")(function* (
+  const reorderRoutes = Effect.fn("MachineRegistry.reorderRoutes")(function* (
     machineId: MachineId,
     routeIds: ReadonlyArray<string>,
   ) {
@@ -976,7 +976,7 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const removeRelayMachines = Effect.fn("EnvironmentRegistry.removeRelayMachines")(
+  const removeRelayMachines = Effect.fn("MachineRegistry.removeRelayMachines")(
     function* () {
       const relayMachineIds = [...(yield* SubscriptionRef.get(entries)).values()]
         .filter((entry) =>
@@ -988,7 +988,7 @@ export const make = Effect.gen(function* () {
         relayMachineIds,
         (machineId) =>
           removeRoute(machineId, RELAY_ROUTE_ID).pipe(
-            Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }),
+            Effect.catchTags({ MachineNotRegisteredError: () => Effect.void }),
           ),
         {
           concurrency: "unbounded",
@@ -1001,10 +1001,10 @@ export const make = Effect.gen(function* () {
   const retryNow = (machineId: MachineId) =>
     acquireSupervisor(machineId).pipe(
       Effect.flatMap((supervisor) => supervisor.retryNow),
-      Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }),
-      Effect.withSpan("EnvironmentRegistry.retryNow"),
+      Effect.catchTags({ MachineNotRegisteredError: () => Effect.void }),
+      Effect.withSpan("MachineRegistry.retryNow"),
     );
-  const setEnabled = Effect.fn("EnvironmentRegistry.setEnabled")(function* (
+  const setEnabled = Effect.fn("MachineRegistry.setEnabled")(function* (
     machineId: MachineId,
     enabled: boolean,
   ) {
@@ -1062,7 +1062,7 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const state = Effect.fn("EnvironmentRegistry.state")(function* (machineId: MachineId) {
+  const state = Effect.fn("MachineRegistry.state")(function* (machineId: MachineId) {
     const supervisor = yield* acquireSupervisor(machineId);
     return yield* SubscriptionRef.get(supervisor.state);
   });
@@ -1070,7 +1070,7 @@ export const make = Effect.gen(function* () {
     followStream(
       machineId,
       Stream.unwrap(
-        EnvironmentSupervisor.EnvironmentSupervisor.pipe(
+        MachineSupervisor.MachineSupervisor.pipe(
           Effect.map((supervisor) => SubscriptionRef.changes(supervisor.state)),
         ),
       ),
@@ -1091,7 +1091,7 @@ export const make = Effect.gen(function* () {
     Effect.forkScoped,
   );
 
-  const setCompatibility = Effect.fn("EnvironmentRegistry.setCompatibility")(function* (
+  const setCompatibility = Effect.fn("MachineRegistry.setCompatibility")(function* (
     machineId: MachineId,
     error: ConnectionBlockedError | null,
   ) {
@@ -1134,7 +1134,7 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  return EnvironmentRegistry.of({
+  return MachineRegistry.of({
     entries,
     networkStatus,
     start,
@@ -1156,4 +1156,4 @@ export const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(EnvironmentRegistry, make);
+export const layer = Layer.effect(MachineRegistry, make);

@@ -40,7 +40,7 @@ export function persistPullRequestStats(): QueryPersistence<PullRequestListStats
           return ref ? row.save(machineId, statKey(ref), stat) : Effect.void;
         });
       },
-      (effect, _environmentId, _key, _result) => effect.pipe(Effect.ignore),
+      (effect, _machineId, _key, _result) => effect.pipe(Effect.ignore),
     ),
   };
 }

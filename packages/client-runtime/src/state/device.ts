@@ -1,15 +1,15 @@
 import { type DeviceToolVersions, WS_METHODS } from "@vekrel/contracts";
 import { Atom } from "effect/reactivity";
 
-import type { EnvironmentRegistry } from "../connection/registry.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
 import {
   createAtomCommandScheduler,
-  createEnvironmentRpcCommand,
-  createEnvironmentRpcSubscriptionAtomFamily,
+  createMachineRpcCommand,
+  createMachineRpcSubscriptionAtomFamily,
 } from "./runtime.ts";
 
-export function createDeviceEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+export function createDeviceMachineAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry | R, E>,
 ) {
   const scheduler = createAtomCommandScheduler();
   const concurrency = {
@@ -36,55 +36,55 @@ export function createDeviceEnvironmentAtoms<R, E>(
       JSON.stringify([machineId, "open", input.threadId, input.hostId ?? null, input.deviceId]),
   };
   return {
-    state: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+    state: createMachineRpcSubscriptionAtomFamily(runtime, {
       label: "machine-data:device:state",
       tag: WS_METHODS.subscribeDeviceState,
     }),
-    configure: createEnvironmentRpcCommand(runtime, {
+    configure: createMachineRpcCommand(runtime, {
       label: "machine-data:device:configure",
       tag: WS_METHODS.deviceConfigure,
       scheduler,
       concurrency,
     }),
-    testHost: createEnvironmentRpcCommand(runtime, {
+    testHost: createMachineRpcCommand(runtime, {
       label: "machine-data:device:test-host",
       tag: WS_METHODS.deviceTestHost,
     }),
-    easAccount: createEnvironmentRpcCommand(runtime, {
+    easAccount: createMachineRpcCommand(runtime, {
       label: "machine-data:device:eas-account",
       tag: WS_METHODS.deviceEasAccount,
     }),
-    list: createEnvironmentRpcCommand(runtime, {
+    list: createMachineRpcCommand(runtime, {
       label: "machine-data:device:list",
       tag: WS_METHODS.deviceList,
       scheduler,
       concurrency,
     }),
-    open: createEnvironmentRpcCommand(runtime, {
+    open: createMachineRpcCommand(runtime, {
       label: "machine-data:device:open",
       tag: WS_METHODS.deviceOpen,
       scheduler,
       concurrency: openConcurrency,
     }),
-    close: createEnvironmentRpcCommand(runtime, {
+    close: createMachineRpcCommand(runtime, {
       label: "machine-data:device:close",
       tag: WS_METHODS.deviceClose,
       scheduler,
       concurrency,
     }),
-    shutdown: createEnvironmentRpcCommand(runtime, {
+    shutdown: createMachineRpcCommand(runtime, {
       label: "machine-data:device:shutdown",
       tag: WS_METHODS.deviceShutdown,
       scheduler,
       concurrency,
     }),
-    detail: createEnvironmentRpcCommand(runtime, {
+    detail: createMachineRpcCommand(runtime, {
       label: "machine-data:device:detail",
       tag: WS_METHODS.deviceDetail,
       scheduler,
       concurrency,
     }),
-    action: createEnvironmentRpcCommand(runtime, {
+    action: createMachineRpcCommand(runtime, {
       label: "machine-data:device:action",
       tag: WS_METHODS.deviceAction,
       scheduler,

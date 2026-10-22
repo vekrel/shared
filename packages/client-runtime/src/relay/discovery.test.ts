@@ -1,6 +1,6 @@
 import { MachineId } from "@vekrel/contracts";
 import type {
-  RelayClientEnvironmentRecord,
+  RelayClientMachineRecord,
   RelayMachineStatusResponse,
 } from "@vekrel/contracts/relay";
 import { describe, expect, it } from "@effect/vitest";
@@ -42,10 +42,10 @@ const machines = [
     },
     linkedAt: "2026-06-01T00:00:00.000Z",
   },
-] satisfies ReadonlyArray<RelayClientEnvironmentRecord>;
+] satisfies ReadonlyArray<RelayClientMachineRecord>;
 
 function status(
-  machine: RelayClientEnvironmentRecord,
+  machine: RelayClientMachineRecord,
   value: "online" | "offline",
 ): RelayMachineStatusResponse {
   return {

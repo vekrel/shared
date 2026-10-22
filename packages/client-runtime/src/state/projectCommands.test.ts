@@ -23,17 +23,17 @@ import * as Stream from "effect/Stream";
 import { Atom, AtomRegistry, AsyncResult } from "effect/reactivity";
 import { AVAILABLE_CONNECTION_STATE } from "../connection/model.ts";
 
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineRegistry from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import type { EnvironmentProject } from "./models.ts";
-import { createProjectEnvironmentAtoms } from "./projectCommands.ts";
+import type { MachineProject } from "./models.ts";
+import { createProjectMachineAtoms } from "./projectCommands.ts";
 
 const decodeReadFileInput = Schema.decodeUnknownSync(ProjectReadFileInput);
 const decodeReadFileResult = Schema.decodeUnknownSync(ProjectReadFileResult);
 const MACHINE_ID = MachineId.make("machine-1");
 vi.mock("./session.ts", () => ({
-  createEnvironmentSessionAtoms: () => ({ sessionStateAtom: sessions }),
+  createMachineSessionAtoms: () => ({ sessionStateAtom: sessions }),
 }));
 const sessions = Atom.family((_id: MachineId) =>
   Atom.make<AsyncResult.AsyncResult<AuthSessionState>>(AsyncResult.initial()),
@@ -43,7 +43,7 @@ const PROJECT = {
   id: PROJECT_ID,
   machineId: MACHINE_ID,
   workspaceRoot: "/scratch",
-} as EnvironmentProject;
+} as MachineProject;
 
 const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
   const metadataRequests: string[][] = [];
@@ -52,7 +52,7 @@ const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
     wait: Effect.void as Effect.Effect<void>,
     missing: false,
   };
-  const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+  const supervisor = MachineSupervisor.MachineSupervisor.of({
     target: { machineId: MACHINE_ID },
     session: yield* SubscriptionRef.make(
       Option.some({
@@ -97,15 +97,15 @@ const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
       ...AVAILABLE_CONNECTION_STATE,
       phase: "connected" as const,
     }),
-  } as EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+  } as MachineSupervisor.MachineSupervisor["Service"]);
   const runtime = Atom.runtime(
     Layer.mergeAll(
-      Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, {
-        run: (_environmentId, effect) =>
-          Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-        followStream: (_environmentId, stream) =>
-          Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-      } as EnvironmentRegistry.EnvironmentRegistry["Service"]),
+      Layer.succeed(MachineRegistry.MachineRegistry, {
+        run: (_machineId, effect) =>
+          Effect.provideService(effect, MachineSupervisor.MachineSupervisor, supervisor),
+        followStream: (_machineId, stream) =>
+          Stream.provideService(stream, MachineSupervisor.MachineSupervisor, supervisor),
+      } as MachineRegistry.MachineRegistry["Service"]),
       Layer.succeed(
         Crypto.Crypto,
         Crypto.make({
@@ -115,8 +115,8 @@ const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
       ),
     ),
   );
-  const storedProject = Atom.make<EnvironmentProject | null>(null);
-  const commands = createProjectEnvironmentAtoms(runtime, {
+  const storedProject = Atom.make<MachineProject | null>(null);
+  const commands = createProjectMachineAtoms(runtime, {
     projectAtom: (ref: ScopedProjectRef) =>
       ref.machineId === MACHINE_ID && ref.projectId === PROJECT_ID
         ? storedProject

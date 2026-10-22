@@ -26,7 +26,7 @@ export function credentialMissingError(connectionId: string): ConnectionBlockedE
   });
 }
 
-export function environmentMismatchError(input: {
+export function machineMismatchError(input: {
   readonly expected: MachineId;
   readonly actual: MachineId;
 }): ConnectionBlockedError {
@@ -196,8 +196,8 @@ export function mapRemoteMachineError(
         hop: "server",
         via,
       });
-    case "EnvironmentScopeRequiredError":
-    case "EnvironmentOperationForbiddenError":
+    case "MachineScopeRequiredError":
+    case "MachineOperationForbiddenError":
       return new ConnectionBlockedError({
         reason: "permission",
         detail: "The machine credential does not grant the required access.",
@@ -205,7 +205,7 @@ export function mapRemoteMachineError(
         hop: "server",
         via,
       });
-    case "EnvironmentRequestInvalidError":
+    case "MachineRequestInvalidError":
       return new ConnectionBlockedError({
         reason: "configuration",
         detail: "The machine rejected the authentication request.",
@@ -213,7 +213,7 @@ export function mapRemoteMachineError(
         hop: "server",
         via,
       });
-    case "EnvironmentResourceNotFoundError":
+    case "MachineResourceNotFoundError":
       return new ConnectionBlockedError({
         reason: "configuration",
         detail: "The machine endpoint could not be found.",
@@ -235,7 +235,7 @@ export function mapRemoteMachineError(
         hop: unreachableHop,
         via,
       });
-    case "EnvironmentInternalError":
+    case "MachineInternalError":
       return new ConnectionTransientError({
         reason: "remote-unavailable",
         detail: "The machine could not authorize the connection.",
@@ -259,7 +259,7 @@ export function mapRemoteMachineError(
  * invalid-credential response as other failures, so keep the compatibility hint
  * cautious when the server omits the category.
  */
-export function mapRemoteDpopEnvironmentError(
+export function mapRemoteDpopMachineError(
   error: RemoteMachineAuthError,
 ): ConnectionAttemptError {
   if (error._tag === "MachineAuthInvalidError" && error.reason === "invalid_credential") {

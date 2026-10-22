@@ -5,7 +5,7 @@ import { expect, it } from "vite-plus/test";
 
 import {
   createArchivedThreadSnapshotsAtomFamily,
-  makeArchivedThreadsEnvironmentKey,
+  makeArchivedThreadsMachineKey,
 } from "./archivedThreads.ts";
 
 it("does not expose an archived snapshot failure message", () => {
@@ -21,7 +21,7 @@ it("does not expose an archived snapshot failure message", () => {
   });
   const registry = AtomRegistry.make();
 
-  expect(registry.get(snapshotsAtom(makeArchivedThreadsEnvironmentKey([machineId])))).toEqual({
+  expect(registry.get(snapshotsAtom(makeArchivedThreadsMachineKey([machineId])))).toEqual({
     snapshots: [],
     error: "Failed to load archived threads.",
     isLoading: false,

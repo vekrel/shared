@@ -1,7 +1,7 @@
 import {
   RelayAccessTokenType,
   RelayApi,
-  type RelayClientEnvironmentRecord,
+  type RelayClientMachineRecord,
   type RelayClientDeviceRecord,
   RelayConnectMachineEndpoint,
   type RelayDeviceRegistrationRequest,
@@ -256,7 +256,7 @@ export class ManagedRelayClient extends Context.Service<
     readonly relayUrl: string;
     readonly listMachines: (input: {
       readonly clerkToken: string;
-    }) => Effect.Effect<ReadonlyArray<RelayClientEnvironmentRecord>, ManagedRelayClientError>;
+    }) => Effect.Effect<ReadonlyArray<RelayClientMachineRecord>, ManagedRelayClientError>;
     readonly listDevices: (input: {
       readonly clerkToken: string;
     }) => Effect.Effect<ReadonlyArray<RelayClientDeviceRecord>, ManagedRelayClientError>;
@@ -270,17 +270,17 @@ export class ManagedRelayClient extends Context.Service<
     }) => Effect.Effect<RelayMachineLinkResponse, ManagedRelayClientError>;
     readonly unlinkMachine: (input: {
       readonly clerkToken: string;
-      readonly machineId: RelayClientEnvironmentRecord["machineId"];
+      readonly machineId: RelayClientMachineRecord["machineId"];
     }) => Effect.Effect<RelayOkResponse, ManagedRelayClientError>;
     readonly getMachineStatus: (input: {
       readonly clerkToken: string;
       readonly scopes: ReadonlyArray<RelayDpopAccessTokenScope>;
-      readonly machineId: RelayClientEnvironmentRecord["machineId"];
+      readonly machineId: RelayClientMachineRecord["machineId"];
     }) => Effect.Effect<RelayMachineStatusResponse, ManagedRelayClientError>;
     readonly connectMachine: (input: {
       readonly clerkToken: string;
       readonly scopes: ReadonlyArray<RelayDpopAccessTokenScope>;
-      readonly machineId: RelayClientEnvironmentRecord["machineId"];
+      readonly machineId: RelayClientMachineRecord["machineId"];
       readonly deviceId?: string;
     }) => Effect.Effect<RelayMachineConnectResponse, ManagedRelayClientError>;
     readonly registerDevice: (input: {
@@ -461,13 +461,13 @@ export const make = Effect.fn("ManagedRelayClient.make")(function* (
       url: urlBuilder.token.exchangeDpopAccessToken(),
     }),
     getMachineStatus: (
-      machineId: RelayClientEnvironmentRecord["machineId"],
+      machineId: RelayClientMachineRecord["machineId"],
     ): DpopProofTarget => ({
       method: RelayGetMachineStatusEndpoint.method,
       url: urlBuilder.dpopClient.getMachineStatus({ params: { machineId } }),
     }),
     connectMachine: (
-      machineId: RelayClientEnvironmentRecord["machineId"],
+      machineId: RelayClientMachineRecord["machineId"],
     ): DpopProofTarget => ({
       method: RelayConnectMachineEndpoint.method,
       url: urlBuilder.dpopClient.connectMachine({ params: { machineId } }),

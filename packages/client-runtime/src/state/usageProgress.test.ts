@@ -6,7 +6,7 @@ import {
 } from "@vekrel/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { usageEnvironmentProgress, usageLoadingState, usageProgress } from "./usageProgress.ts";
+import { usageMachineProgress, usageLoadingState, usageProgress } from "./usageProgress.ts";
 
 function summary(refreshing: readonly UsageProviderKind[] = []): UsageSummary {
   return {
@@ -72,7 +72,7 @@ describe("usageProgress", () => {
 
   it("names a slow source without dimming once its machine answers from cache", () => {
     const partway = machine("a", { isPending: true, summary: summary(["cursor"]) });
-    expect(usageEnvironmentProgress(partway)).toEqual({ phase: "partway", providers: ["cursor"] });
+    expect(usageMachineProgress(partway)).toEqual({ phase: "partway", providers: ["cursor"] });
     expect(usageProgress([partway, machine("b")], options)).toEqual({
       dimmed: false,
       label: "Updating cursor label…",
@@ -104,7 +104,7 @@ describe("usageProgress", () => {
         options,
       ),
     ).toEqual({ dimmed: false, label: "Updating slow…" });
-    expect(usageEnvironmentProgress(ignored[0]!)).toEqual({ phase: "inactive" });
+    expect(usageMachineProgress(ignored[0]!)).toEqual({ phase: "inactive" });
   });
 });
 

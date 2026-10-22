@@ -1,34 +1,34 @@
 import type { MachineId as MachineIdType } from "@vekrel/contracts";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import type * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineRegistry from "../connection/registry.ts";
+import type * as MachineSupervisor from "../connection/supervisor.ts";
 
-export function runStreamInEnvironment<A, E, R>(
+export function runStreamInMachine<A, E, R>(
   machineId: MachineIdType,
   stream: Stream.Stream<A, E, R>,
 ): Stream.Stream<
   A,
-  E | EnvironmentRegistry.EnvironmentNotRegisteredError,
-  EnvironmentRegistry.EnvironmentRegistry | Exclude<R, EnvironmentSupervisor.EnvironmentSupervisor>
+  E | MachineRegistry.MachineNotRegisteredError,
+  MachineRegistry.MachineRegistry | Exclude<R, MachineSupervisor.MachineSupervisor>
 > {
   return Stream.unwrap(
-    EnvironmentRegistry.EnvironmentRegistry.pipe(
+    MachineRegistry.MachineRegistry.pipe(
       Effect.map((registry) => registry.runStream(machineId, stream)),
     ),
   );
 }
 
-export function followStreamInEnvironment<A, E, R>(
+export function followStreamInMachine<A, E, R>(
   machineId: MachineIdType,
   stream: Stream.Stream<A, E, R>,
 ): Stream.Stream<
   A,
   E,
-  EnvironmentRegistry.EnvironmentRegistry | Exclude<R, EnvironmentSupervisor.EnvironmentSupervisor>
+  MachineRegistry.MachineRegistry | Exclude<R, MachineSupervisor.MachineSupervisor>
 > {
   return Stream.unwrap(
-    EnvironmentRegistry.EnvironmentRegistry.pipe(
+    MachineRegistry.MachineRegistry.pipe(
       Effect.map((registry) => registry.followStream(machineId, stream)),
     ),
   );

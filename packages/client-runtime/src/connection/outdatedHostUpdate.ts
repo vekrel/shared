@@ -25,7 +25,7 @@ import { makeWsRpcProtocolClient, PING_TIMEOUT } from "../rpc/protocol.ts";
 import { isLegacyUpdateHandoffLoss, resolveServerUpdateProgressResult } from "../state/server.ts";
 import * as RelayMachineDiscovery from "../relay/discovery.ts";
 import * as ConnectionResolver from "./resolver.ts";
-import * as EnvironmentRegistry from "./registry.ts";
+import * as MachineRegistry from "./registry.ts";
 import {
   connectionRoutes,
   hasRelayRoute,
@@ -51,11 +51,11 @@ export type OutdatedHostUpdateStage = "downloading" | "installing" | "resuming";
 const reachOutdatedHost = Effect.fn("clientRuntime.connection.reachOutdatedHost")(function* (
   machineId: MachineId,
 ) {
-  const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+  const registry = yield* MachineRegistry.MachineRegistry;
   const resolver = yield* ConnectionResolver.ConnectionResolver;
   const entry = (yield* SubscriptionRef.get(registry.entries)).get(machineId);
   if (entry === undefined) {
-    return yield* new EnvironmentRegistry.EnvironmentNotRegisteredError({ machineId });
+    return yield* new MachineRegistry.MachineNotRegisteredError({ machineId });
   }
   const { prepared, descriptor } = yield* Effect.firstSuccessOf(
     usableRoutes(entry).map((route) => resolver.prepareForUpdate(routeEntry(entry, route))),
@@ -78,7 +78,7 @@ export const updateOutdatedHost = Effect.fn("clientRuntime.connection.updateOutd
     input: ServerSelfUpdateInput,
     onStage: (stage: OutdatedHostUpdateStage) => Effect.Effect<void>,
   ) {
-    const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+    const registry = yield* MachineRegistry.MachineRegistry;
     const webSocketConstructor = yield* Socket.WebSocketConstructor;
     const httpClient = yield* HttpClient.HttpClient;
     const { entry, prepared, descriptor } = yield* reachOutdatedHost(machineId);

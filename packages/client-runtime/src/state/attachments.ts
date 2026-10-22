@@ -8,24 +8,24 @@ import {
 } from "@vekrel/contracts";
 import type { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
-import type { EnvironmentRegistry } from "../connection/registry.ts";
+import type { MachineRegistry } from "../connection/registry.ts";
 import {
-  createEnvironmentRpcCommand,
+  createMachineRpcCommand,
   executeAtomQuery,
   runAtomCommand,
   squashAtomCommandFailure,
   type AtomCommand,
 } from "./runtime.ts";
 
-export function createAttachmentEnvironmentAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+export function createAttachmentMachineAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry | R, E>,
 ) {
   return {
-    createUploadUrl: createEnvironmentRpcCommand(runtime, {
+    createUploadUrl: createMachineRpcCommand(runtime, {
       label: "machine-command:attachments:create-upload-url",
       tag: WS_METHODS.attachmentsCreateUploadUrl,
     }),
-    remove: createEnvironmentRpcCommand(runtime, {
+    remove: createMachineRpcCommand(runtime, {
       label: "machine-command:attachments:delete",
       tag: WS_METHODS.attachmentsDelete,
     }),

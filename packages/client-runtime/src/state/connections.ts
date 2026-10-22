@@ -5,10 +5,10 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { AsyncResult, Atom } from "effect/reactivity";
 
-import * as EnvironmentRegistry from "../connection/registry.ts";
+import * as MachineRegistry from "../connection/registry.ts";
 import type { ConnectionCatalogEntry } from "../connection/catalog.ts";
 import { AVAILABLE_CONNECTION_STATE } from "../connection/model.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import {
   GitHubRoutingPermissions,
   type GitHubRoutingPermission,
@@ -17,16 +17,16 @@ import {
 import {
   createAtomCommandScheduler,
   createRuntimeCommand,
-  followStreamInEnvironment,
+  followStreamInMachine,
 } from "./runtime.ts";
 
-export interface EnvironmentCatalogState {
+export interface MachineCatalogState {
   readonly isReady: boolean;
   readonly entries: ReadonlyMap<MachineIdType, ConnectionCatalogEntry>;
 }
 
 export function* enabledMachineIds(
-  catalog: EnvironmentCatalogState,
+  catalog: MachineCatalogState,
 ): Generator<MachineIdType> {
   for (const [machineId, entry] of catalog.entries) {
     if (entry.enabled && entry.unsupportedReason === undefined) {
@@ -35,19 +35,19 @@ export function* enabledMachineIds(
   }
 }
 
-const EMPTY_ENVIRONMENT_CATALOG_STATE: EnvironmentCatalogState = Object.freeze({
+const EMPTY_MACHINE_CATALOG_STATE: MachineCatalogState = Object.freeze({
   isReady: false,
   entries: new Map(),
 });
 
-export function createEnvironmentCatalogAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, E>,
+export function createMachineCatalogAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry.MachineRegistry | R, E>,
 ) {
   const commandScheduler = createAtomCommandScheduler();
   const serial = { mode: "serial" as const, key: () => "machine-catalog" };
   const catalogAtom = runtime.atom(
     Stream.unwrap(
-      EnvironmentRegistry.EnvironmentRegistry.pipe(
+      MachineRegistry.MachineRegistry.pipe(
         Effect.map((registry) =>
           SubscriptionRef.changes(registry.entries).pipe(
             Stream.map((entries) => ({
@@ -58,11 +58,11 @@ export function createEnvironmentCatalogAtoms<R, E>(
         ),
       ),
     ),
-    { initialValue: EMPTY_ENVIRONMENT_CATALOG_STATE },
+    { initialValue: EMPTY_MACHINE_CATALOG_STATE },
   );
 
   const catalogValueAtom = Atom.make((get) =>
-    Option.getOrElse(AsyncResult.value(get(catalogAtom)), () => EMPTY_ENVIRONMENT_CATALOG_STATE),
+    Option.getOrElse(AsyncResult.value(get(catalogAtom)), () => EMPTY_MACHINE_CATALOG_STATE),
   ).pipe(Atom.withLabel("machine-catalog-value"));
 
   const githubRoutingPermissionsAtom = runtime.atom(
@@ -80,10 +80,10 @@ export function createEnvironmentCatalogAtoms<R, E>(
       readonly machineId: MachineIdType;
       readonly permission: GitHubRoutingPermission;
     }) {
-      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const registry = yield* MachineRegistry.MachineRegistry;
       const entry = (yield* SubscriptionRef.get(registry.entries)).get(input.machineId);
       if (entry === undefined)
-        return yield* new EnvironmentRegistry.EnvironmentNotRegisteredError({
+        return yield* new MachineRegistry.MachineNotRegisteredError({
           machineId: input.machineId,
         });
       const permissions = yield* GitHubRoutingPermissions;
@@ -93,7 +93,7 @@ export function createEnvironmentCatalogAtoms<R, E>(
 
   const networkStatusAtom = runtime.atom(
     Stream.unwrap(
-      EnvironmentRegistry.EnvironmentRegistry.pipe(
+      MachineRegistry.MachineRegistry.pipe(
         Effect.map((registry) => SubscriptionRef.changes(registry.networkStatus)),
       ),
     ),
@@ -106,10 +106,10 @@ export function createEnvironmentCatalogAtoms<R, E>(
 
   const stateAtom = Atom.family((machineId: MachineIdType) =>
     runtime.atom(
-      followStreamInEnvironment(
+      followStreamInMachine(
         machineId,
         Stream.unwrap(
-          EnvironmentSupervisor.EnvironmentSupervisor.pipe(
+          MachineSupervisor.MachineSupervisor.pipe(
             Effect.map((supervisor) => SubscriptionRef.changes(supervisor.state)),
           ),
         ),
@@ -123,9 +123,9 @@ export function createEnvironmentCatalogAtoms<R, E>(
     scheduler: commandScheduler,
     concurrency: serial,
     execute: (
-      target: Parameters<EnvironmentRegistry.EnvironmentRegistry["Service"]["register"]>[0],
+      target: Parameters<MachineRegistry.MachineRegistry["Service"]["register"]>[0],
     ) =>
-      EnvironmentRegistry.EnvironmentRegistry.pipe(
+      MachineRegistry.MachineRegistry.pipe(
         Effect.flatMap((registry) => registry.register(target)),
       ),
   });
@@ -134,7 +134,7 @@ export function createEnvironmentCatalogAtoms<R, E>(
     scheduler: commandScheduler,
     concurrency: serial,
     execute: (machineId: MachineIdType) =>
-      EnvironmentRegistry.EnvironmentRegistry.pipe(
+      MachineRegistry.MachineRegistry.pipe(
         Effect.flatMap((registry) => registry.remove(machineId)),
       ),
   });
@@ -143,7 +143,7 @@ export function createEnvironmentCatalogAtoms<R, E>(
     scheduler: commandScheduler,
     concurrency: serial,
     execute: (_input: void) =>
-      EnvironmentRegistry.EnvironmentRegistry.pipe(
+      MachineRegistry.MachineRegistry.pipe(
         Effect.flatMap((registry) => registry.removeRelayMachines()),
       ),
   });
@@ -152,7 +152,7 @@ export function createEnvironmentCatalogAtoms<R, E>(
     scheduler: commandScheduler,
     concurrency: serial,
     execute: (input: { readonly machineId: MachineIdType; readonly enabled: boolean }) =>
-      EnvironmentRegistry.EnvironmentRegistry.pipe(
+      MachineRegistry.MachineRegistry.pipe(
         Effect.flatMap((registry) => registry.setEnabled(input.machineId, input.enabled)),
       ),
   });
@@ -161,7 +161,7 @@ export function createEnvironmentCatalogAtoms<R, E>(
     scheduler: commandScheduler,
     concurrency: serial,
     execute: (input: { readonly machineId: MachineIdType; readonly routeId: string }) =>
-      EnvironmentRegistry.EnvironmentRegistry.pipe(
+      MachineRegistry.MachineRegistry.pipe(
         Effect.flatMap((registry) => registry.removeRoute(input.machineId, input.routeId)),
       ),
   });
@@ -173,7 +173,7 @@ export function createEnvironmentCatalogAtoms<R, E>(
       readonly machineId: MachineIdType;
       readonly routeIds: ReadonlyArray<string>;
     }) =>
-      EnvironmentRegistry.EnvironmentRegistry.pipe(
+      MachineRegistry.MachineRegistry.pipe(
         Effect.flatMap((registry) => registry.reorderRoutes(input.machineId, input.routeIds)),
       ),
   });
@@ -182,7 +182,7 @@ export function createEnvironmentCatalogAtoms<R, E>(
     scheduler: commandScheduler,
     concurrency: serial,
     execute: (machineId: MachineIdType) =>
-      EnvironmentRegistry.EnvironmentRegistry.pipe(
+      MachineRegistry.MachineRegistry.pipe(
         Effect.flatMap((registry) => registry.retryNow(machineId)),
       ),
   });

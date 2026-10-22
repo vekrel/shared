@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 
-import { environmentEndpointUrl } from "./endpoint.ts";
+import { machineEndpointUrl } from "./endpoint.ts";
 import { executeMachineHttpRequest, makeMachineHttpApiGroupClient } from "../rpc/http.ts";
 
 const DEFAULT_REMOTE_REQUEST_TIMEOUT_MS = 10_000;
@@ -10,7 +10,7 @@ export const fetchRemoteMachineDescriptor = Effect.fn(
 )(function* (input: { readonly httpBaseUrl: string; readonly timeoutMs?: number }) {
   const client = yield* makeMachineHttpApiGroupClient(input.httpBaseUrl, "metadata");
   return yield* executeMachineHttpRequest(
-    environmentEndpointUrl(input.httpBaseUrl, "/.well-known/vekrel/machine"),
+    machineEndpointUrl(input.httpBaseUrl, "/.well-known/vekrel/machine"),
     input.timeoutMs ?? DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
     client.descriptor(),
   );

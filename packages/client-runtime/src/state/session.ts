@@ -8,13 +8,13 @@ import { HttpClient } from "effect/http";
 import { AsyncResult, Atom } from "effect/reactivity";
 
 import * as RemoteMachineAuthorization from "../authorization/service.ts";
-import * as EnvironmentRegistry from "../connection/registry.ts";
+import * as MachineRegistry from "../connection/registry.ts";
 import type { PreparedConnection } from "../connection/model.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
 import { executeAuthenticatedMachineHttpRequest } from "./machineHttpAuth.ts";
-import { followStreamInEnvironment } from "./machineStreams.ts";
+import { followStreamInMachine } from "./machineStreams.ts";
 
 /** @public Required to name the error in consumers' inferred session results. */
 export class SessionHttpClientUnavailable extends Data.TaggedError(
@@ -37,8 +37,8 @@ function initialConfigOption<E>(
 
 const DEFAULT_SESSION_STATE_TIMEOUT_MS = 6_000;
 
-export const fetchEnvironmentSessionState = Effect.fn(
-  "clientRuntime.state.fetchEnvironmentSessionState",
+export const fetchMachineSessionState = Effect.fn(
+  "clientRuntime.state.fetchMachineSessionState",
 )(function* (input: {
   readonly prepared: PreparedConnection;
   readonly signer: Option.Option<ManagedRelay.ManagedRelayDpopSigner["Service"]>;
@@ -59,15 +59,15 @@ export const fetchEnvironmentSessionState = Effect.fn(
   });
 });
 
-function makeEnvironmentSessionAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, E>,
+function makeMachineSessionAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry.MachineRegistry | R, E>,
 ) {
   const initialConfigAtom = Atom.family((machineId: MachineId) =>
     runtime.atom(
-      followStreamInEnvironment(
+      followStreamInMachine(
         machineId,
         Stream.unwrap(
-          EnvironmentSupervisor.EnvironmentSupervisor.pipe(
+          MachineSupervisor.MachineSupervisor.pipe(
             Effect.map((supervisor) =>
               SubscriptionRef.changes(supervisor.session).pipe(
                 Stream.mapEffect(
@@ -100,10 +100,10 @@ function makeEnvironmentSessionAtoms<R, E>(
 
   const preparedConnectionAtom = Atom.family((machineId: MachineId) =>
     runtime.atom(
-      followStreamInEnvironment(
+      followStreamInMachine(
         machineId,
         Stream.unwrap(
-          EnvironmentSupervisor.EnvironmentSupervisor.pipe(
+          MachineSupervisor.MachineSupervisor.pipe(
             Effect.map((supervisor) => SubscriptionRef.changes(supervisor.prepared)),
           ),
         ),
@@ -134,7 +134,7 @@ function makeEnvironmentSessionAtoms<R, E>(
           );
           const client = yield* Effect.serviceOption(HttpClient.HttpClient);
           if (Option.isNone(client)) return yield* new SessionHttpClientUnavailable();
-          return yield* fetchEnvironmentSessionState({
+          return yield* fetchMachineSessionState({
             prepared,
             signer,
             remoteAuthorization,
@@ -165,14 +165,14 @@ function makeEnvironmentSessionAtoms<R, E>(
   };
 }
 
-const sessionAtomsByRuntime = new WeakMap<object, ReturnType<typeof makeEnvironmentSessionAtoms>>();
+const sessionAtomsByRuntime = new WeakMap<object, ReturnType<typeof makeMachineSessionAtoms>>();
 
-export function createEnvironmentSessionAtoms<R, E>(
-  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, E>,
-): ReturnType<typeof makeEnvironmentSessionAtoms<R, E>> {
+export function createMachineSessionAtoms<R, E>(
+  runtime: Atom.AtomRuntime<MachineRegistry.MachineRegistry | R, E>,
+): ReturnType<typeof makeMachineSessionAtoms<R, E>> {
   const existing = sessionAtomsByRuntime.get(runtime);
-  if (existing) return existing as ReturnType<typeof makeEnvironmentSessionAtoms<R, E>>;
-  const atoms = makeEnvironmentSessionAtoms(runtime);
+  if (existing) return existing as ReturnType<typeof makeMachineSessionAtoms<R, E>>;
+  const atoms = makeMachineSessionAtoms(runtime);
   sessionAtomsByRuntime.set(runtime, atoms);
   return atoms;
 }

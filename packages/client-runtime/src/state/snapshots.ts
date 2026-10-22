@@ -2,12 +2,12 @@ import type { MachineId, OrchestrationV2ShellSnapshot } from "@vekrel/contracts"
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 
-import type { EnvironmentShellState } from "./shell.ts";
+import type { MachineShellState } from "./shell.ts";
 
-export function createEnvironmentSnapshotAtom<E>(
+export function createMachineSnapshotAtom<E>(
   shellStateAtom: (
     machineId: MachineId,
-  ) => Atom.Atom<AsyncResult.AsyncResult<EnvironmentShellState, E>>,
+  ) => Atom.Atom<AsyncResult.AsyncResult<MachineShellState, E>>,
 ) {
   return Atom.family((machineId: MachineId) =>
     Atom.make((get): OrchestrationV2ShellSnapshot | null =>

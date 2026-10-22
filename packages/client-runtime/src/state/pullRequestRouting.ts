@@ -15,8 +15,8 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as MachineRegistry from "../connection/registry.ts";
+import * as MachineSupervisor from "../connection/supervisor.ts";
 import {
   GitHubRoutingPermissions,
   gitHubRoutingConnectionKey,
@@ -26,9 +26,9 @@ import * as ConnectionProfileStore from "../connection/profileStore.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import {
   requestGuarded as request,
-  EnvironmentRpcUnavailableError,
-  type EnvironmentRpcInput,
-  type EnvironmentUnaryRpcTag,
+  MachineRpcUnavailableError,
+  type MachineRpcInput,
+  type MachineUnaryRpcTag,
 } from "../rpc/client.ts";
 
 const reads = new Set<string>([
@@ -70,7 +70,7 @@ const readTimeout = (machineId: MachineId) =>
     duration: "30 seconds",
     orElse: () =>
       Effect.fail(
-        new EnvironmentRpcUnavailableError({
+        new MachineRpcUnavailableError({
           machineId,
           message: "The machine did not respond to the PR request.",
         }),
@@ -82,10 +82,10 @@ interface RoutedRead {
   targets: Set<MachineId>;
 }
 const routedReads = new WeakMap<
-  EnvironmentRegistry.EnvironmentRegistry["Service"],
+  MachineRegistry.MachineRegistry["Service"],
   Map<string, RoutedRead>
 >();
-const isUnregistered = Schema.is(EnvironmentRegistry.EnvironmentNotRegisteredError);
+const isUnregistered = Schema.is(MachineRegistry.MachineNotRegisteredError);
 const encodeKey = Schema.encodeSync(
   Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.String))),
 );
@@ -97,10 +97,10 @@ function shareMetadataRead<A, R>(
   pending: PendingMetadata<A>,
   key: string,
   probe: Effect.Effect<A, never, R>,
-): Effect.Effect<A, never, R | EnvironmentSupervisor.EnvironmentSupervisor> {
+): Effect.Effect<A, never, R | MachineSupervisor.MachineSupervisor> {
   return Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
-      const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+      const supervisor = yield* MachineSupervisor.MachineSupervisor;
       const session = yield* SubscriptionRef.get(supervisor.session);
       if (Option.isNone(session)) return yield* restore(probe);
       const entries =
@@ -147,8 +147,8 @@ function rejectedBeforeDispatch(error: unknown): boolean {
     typeof error === "object" &&
     error !== null &&
     "_tag" in error &&
-    (error._tag === "EnvironmentRpcUnavailableError" ||
-      error._tag === "EnvironmentNotRegisteredError" ||
+    (error._tag === "MachineRpcUnavailableError" ||
+      error._tag === "MachineNotRegisteredError" ||
       (error._tag === "PullRequestOperationError" &&
         "operation" in error &&
         error.operation === "routeIdentity"))
@@ -156,7 +156,7 @@ function rejectedBeforeDispatch(error: unknown): boolean {
 }
 
 const routingAllowed = Effect.fn("PullRequestRouting.allowed")(function* (
-  registry: EnvironmentRegistry.EnvironmentRegistry["Service"],
+  registry: MachineRegistry.MachineRegistry["Service"],
   originId: MachineId,
   destinationId: MachineId,
   write: boolean,
@@ -201,7 +201,7 @@ function matchesReference(reference: PullRequestRef, filter: PullRequestRef): bo
 }
 
 const invalidateTarget = Effect.fn("PullRequestRouting.invalidateTarget")(function* (
-  registry: EnvironmentRegistry.EnvironmentRegistry["Service"],
+  registry: MachineRegistry.MachineRegistry["Service"],
   origin: MachineId,
   target: MachineId,
   inputs: ReadonlyArray<PullRequestInvalidateInput>,
@@ -236,13 +236,13 @@ const reportState = (
 /** Credentials stay on their machines. Only a verified host and account cross the wire. */
 export function createPullRequestRouter() {
   const routedRequest = Effect.fn("PullRequestRouting.request")(function* <
-    T extends EnvironmentUnaryRpcTag,
-  >(tag: T, input: EnvironmentRpcInput<T>, sourceRead?: ReturnType<typeof request<T>>) {
+    T extends MachineUnaryRpcTag,
+  >(tag: T, input: MachineRpcInput<T>, sourceRead?: ReturnType<typeof request<T>>) {
     const source = sourceRead ?? request(tag, input);
     if (tag === WS_METHODS.pullRequestsInvalidate && isInvalidation(input)) {
       const result = yield* request(tag, input);
-      const origin = yield* EnvironmentSupervisor.EnvironmentSupervisor;
-      const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+      const origin = yield* MachineSupervisor.MachineSupervisor;
+      const registry = yield* MachineRegistry.MachineRegistry;
       const used = routedReads.get(registry);
       const targets = new Map<MachineId, PullRequestRef>();
       for (const entry of used?.values() ?? []) {
@@ -267,8 +267,8 @@ export function createPullRequestRouter() {
       return yield* request(tag, input);
     }
     const ref = input;
-    const origin = yield* EnvironmentSupervisor.EnvironmentSupervisor;
-    const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+    const origin = yield* MachineSupervisor.MachineSupervisor;
+    const registry = yield* MachineRegistry.MachineRegistry;
     const entries = yield* SubscriptionRef.get(registry.entries);
     const sourceEntry = entries.get(origin.target.machineId);
     const used = routedReads.get(registry) ?? new Map<string, RoutedRead>();
@@ -321,7 +321,7 @@ export function createPullRequestRouter() {
       const connected = yield* registry
         .run(
           id,
-          EnvironmentSupervisor.EnvironmentSupervisor.pipe(
+          MachineSupervisor.MachineSupervisor.pipe(
             Effect.flatMap((s) => SubscriptionRef.get(s.session)),
           ),
         )
@@ -399,7 +399,7 @@ export function createPullRequestRouter() {
         ),
         Effect.mapError((error) =>
           isUnregistered(error)
-            ? new EnvironmentRpcUnavailableError({
+            ? new MachineRpcUnavailableError({
                 machineId: id,
                 message: "The machine was removed.",
               })
@@ -470,15 +470,15 @@ export function createPullRequestRouter() {
     return yield* finish(visit(0));
   });
 
-  return Effect.fn("PullRequestRouting.readOrWrite")(function* <T extends EnvironmentUnaryRpcTag>(
+  return Effect.fn("PullRequestRouting.readOrWrite")(function* <T extends MachineUnaryRpcTag>(
     tag: T,
-    input: EnvironmentRpcInput<T>,
+    input: MachineRpcInput<T>,
   ) {
     if (!reads.has(tag) || !isRef(input)) return yield* routedRequest(tag, input);
-    const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+    const registry = yield* MachineRegistry.MachineRegistry;
     const entries = yield* SubscriptionRef.get(registry.entries);
     if (entries.size < 2) return yield* request(tag, input);
-    const origin = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const origin = yield* MachineSupervisor.MachineSupervisor;
     let allowed = false;
     for (const id of entries.keys()) {
       if (
