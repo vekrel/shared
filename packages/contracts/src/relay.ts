@@ -332,7 +332,7 @@ export const RelayMachineLinkRequest = Schema.Struct({
   notificationsEnabled: Schema.Boolean,
   liveActivitiesEnabled: Schema.Boolean,
   managedTunnelsEnabled: Schema.Boolean,
-}).annotate({ description: "Links an authenticated cloud user to a T3 machine." });
+}).annotate({ description: "Links an authenticated cloud user to a Vekrel machine." });
 export type RelayMachineLinkRequest = typeof RelayMachineLinkRequest.Type;
 
 export const RelayMachineLinkResponse = Schema.Struct({
@@ -1277,6 +1277,6 @@ export const RelayApi = HttpApi.make("RelayApi")
   .annotate(OpenApi.Version, "1.0.0")
   .annotate(
     OpenApi.Description,
-    "Control-plane API for linking T3 machines, connecting authorized clients, and publishing agent activity.",
+    "Control-plane API for linking Vekrel machines, connecting authorized clients, and publishing agent activity.",
   );
 export type RelayApi = typeof RelayApi;
