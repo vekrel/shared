@@ -193,6 +193,14 @@ export function createAccountSession(options: AccountSessionOptions): AccountSes
   // Bumped by sign-in and sign-out, so a request started before either cannot change the
   // session afterwards (a late rejection cannot clear a new sign-in).
   let generation = 0;
+  // Every store mutation runs here, one at a time, with its generation checked inside, so a
+  // superseded write cannot land after a sign-out's clear or over a newer sign-in's token.
+  let storeTail: Promise<unknown> = Promise.resolve();
+  const serialized = <T>(callback: () => Promise<T>): Promise<T> => {
+    const run = storeTail.then(callback);
+    storeTail = run.catch(() => undefined);
+    return run;
+  };
 
   /** POST a form; the timeout also covers reading the body. */
   const post = async (
@@ -249,17 +257,32 @@ export function createAccountSession(options: AccountSessionOptions): AccountSes
     return body;
   };
 
+  const revoke = (token: string | null) =>
+    post("/oauth/revoke", {
+      ...(token ? { token } : {}),
+      client_id: options.clientId,
+    }).catch(() => undefined);
+
   const accept = async (body: TokenBody, issuedAtGeneration: number): Promise<string | null> => {
-    if (issuedAtGeneration !== generation) {
-      // Superseded by a sign-in or sign-out: report whatever the session holds now.
-      return access?.token ?? null;
-    }
-    if (store && body.refresh_token !== undefined) {
-      await store.write(body.refresh_token);
-    }
-    status = "in";
-    access = { token: body.access_token, expiresAtMillis: Date.now() + body.expires_in * 1_000 };
-    return body.access_token;
+    const accepted = await serialized(async () => {
+      if (issuedAtGeneration !== generation) return false;
+      if (store && body.refresh_token !== undefined) {
+        await store.write(body.refresh_token);
+        if (issuedAtGeneration !== generation) {
+          // Superseded during the write; nothing newer can have written yet (we hold the queue).
+          await store.clear();
+          return false;
+        }
+      }
+      status = "in";
+      access = { token: body.access_token, expiresAtMillis: Date.now() + body.expires_in * 1_000 };
+      return true;
+    });
+    if (accepted) return body.access_token;
+    // Superseded by a sign-in or sign-out: kill the token's family (best effort, outside the
+    // queue so a newer sign-in is not held up) and report whatever the session holds now.
+    if (body.refresh_token !== undefined) await revoke(body.refresh_token);
+    return access?.token ?? null;
   };
 
   const refreshOnce = async (): Promise<string | null> => {
@@ -284,16 +307,18 @@ export function createAccountSession(options: AccountSessionOptions): AccountSes
       if (!(error instanceof AccountAuthError && error.reason === "token-rejected")) {
         throw error;
       }
-      if (startedAt !== generation) {
-        return access?.token ?? null;
-      }
-      // A stored token counts as signed in: it is the previous launch's session.
-      const wasSignedIn = status === "in" || refreshToken !== null;
-      generation += 1;
-      status = "out";
-      access = null;
-      await store?.clear();
-      if (wasSignedIn) options.onSignedOut?.();
+      const signedOut = await serialized(async () => {
+        if (startedAt !== generation) return null;
+        // A stored token counts as signed in: it is the previous launch's session.
+        const wasSignedIn = status === "in" || refreshToken !== null;
+        generation += 1;
+        status = "out";
+        access = null;
+        await store?.clear();
+        return wasSignedIn;
+      });
+      if (signedOut === null) return access?.token ?? null;
+      if (signedOut) options.onSignedOut?.();
       return null;
     }
   };
@@ -326,19 +351,16 @@ export function createAccountSession(options: AccountSessionOptions): AccountSes
     },
     refresh,
     signOut: async () => {
-      const refreshToken = store ? await store.read() : null;
       generation += 1;
       status = "out";
       access = null;
-      if (web || refreshToken) {
+      await serialized(async () => {
+        const refreshToken = store ? await store.read() : null;
         // Revoke first, so a store that fails to clear still leaves a dead family behind.
         // Best effort: the local session is gone either way; the family expires in 30 days.
-        await post("/oauth/revoke", {
-          ...(refreshToken ? { token: refreshToken } : {}),
-          client_id: options.clientId,
-        }).catch(() => undefined);
-      }
-      await store?.clear();
+        if (web || refreshToken) await revoke(refreshToken);
+        await store?.clear();
+      });
     },
   };
 }

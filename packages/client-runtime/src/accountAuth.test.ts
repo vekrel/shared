@@ -147,6 +147,29 @@ function memoryStore(initial: string | null): RefreshTokenStore & { value: strin
   return store;
 }
 
+/** A store whose next `write` waits until `release` is called; `started` resolves when it begins. */
+function slowWriteStore(initial: string | null) {
+  const store = memoryStore(initial);
+  let release!: () => void;
+  let started!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const writeStarted = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let held = true;
+  const write = async (token: string) => {
+    if (held) {
+      held = false;
+      started();
+      await gate;
+    }
+    store.value = token;
+  };
+  return { store: Object.assign(store, { write }), release, writeStarted };
+}
+
 /** A Web Locks `LockManager` shared by every "tab" of one origin. */
 function sharedWebLocks() {
   let tail: Promise<unknown> = Promise.resolve();
@@ -561,6 +584,77 @@ describe("createAccountSession", () => {
       expect(store.value).toBe("refresh-1");
       expect(onSignedOut).not.toHaveBeenCalled();
     }
+  });
+
+  it("signOut during a slow refresh write leaves the session signed out and revokes the new token", async () => {
+    const relay = fakeRelay();
+    const { store, release, writeStarted } = slowWriteStore(relay.seedRefresh());
+    const session = createAccountSession({
+      relayUrl: RELAY,
+      clientId: AccountClientId.desktop,
+      store,
+      fetch: relay.fetch,
+    });
+
+    const staleRefresh = session.getAccessToken();
+    await writeStarted;
+    const signingOut = session.signOut();
+    release();
+    await Promise.all([staleRefresh, signingOut]);
+
+    expect(store.value).toBeNull();
+    expect(await session.getAccessToken()).toBeNull();
+    expect(relay.tokenRequests()).toHaveLength(1);
+    expect(relay.requests).toContainEqual({
+      path: "/oauth/revoke",
+      token: "refresh-1",
+      client_id: "vekrel-desktop",
+    });
+  });
+
+  it("completeSignIn during a slow refresh write keeps the sign-in's token in the store", async () => {
+    const relay = fakeRelay();
+    const { store, release, writeStarted } = slowWriteStore(relay.seedRefresh());
+    let exchanged!: () => void;
+    const codeExchanged = new Promise<void>((resolve) => {
+      exchanged = resolve;
+    });
+    const session = createAccountSession({
+      relayUrl: RELAY,
+      clientId: AccountClientId.mobile,
+      store,
+      fetch: async (input, init) => {
+        const response = await relay.fetch(input, init);
+        if (String(init.body).includes("authorization_code")) exchanged();
+        return response;
+      },
+    });
+
+    const staleRefresh = session.getAccessToken();
+    await writeStarted;
+    const { pending } = beginSignIn({
+      relayUrl: RELAY,
+      clientId: AccountClientId.mobile,
+      redirectUri: APP_REDIRECT,
+    });
+    relay.addCode("code-1", await challengeOf(pending.verifier), APP_REDIRECT);
+    const signingIn = session.completeSignIn(
+      `${APP_REDIRECT}?code=code-1&state=${pending.state}`,
+      pending,
+    );
+    // From the code exchange on, the sign-in runs in microtasks only: let it go as far as it can.
+    await codeExchanged;
+    for (let tick = 0; tick < 100; tick += 1) await Promise.resolve();
+    release();
+    await Promise.all([staleRefresh, signingIn]);
+
+    expect(store.value).toBe("refresh-2");
+    expect(await session.getAccessToken()).toBe("access-2");
+    expect(relay.requests).toContainEqual({
+      path: "/oauth/revoke",
+      token: "refresh-1",
+      client_id: "vekrel-mobile",
+    });
   });
 });
 
