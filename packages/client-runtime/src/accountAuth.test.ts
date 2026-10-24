@@ -32,6 +32,7 @@ function fakeRelay() {
   const codes = new Map<string, { challenge: string; redirectUri: string }>();
   const jar = { refresh: null as string | null };
   const requests: Array<Record<string, string>> = [];
+  let refreshHold: Promise<void> | null = null;
 
   const json = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), {
@@ -59,7 +60,7 @@ function fakeRelay() {
     const web = form.client_id === AccountClientId.web;
     const cookie = init?.credentials === "include" ? jar.refresh : null;
 
-    if (url.pathname === "/oauth/revoke") {
+    if (url.pathname.endsWith("/oauth/revoke")) {
       const presented = form.token ?? cookie;
       const row = presented ? tokens.get(presented) : undefined;
       if (row) revokedFamilies.add(row.family);
@@ -80,6 +81,7 @@ function fakeRelay() {
       return issue(serial + 1000, web);
     }
 
+    if (refreshHold) await refreshHold;
     const presented = form.refresh_token ?? cookie;
     if (!presented) {
       return json(400, {
@@ -106,10 +108,24 @@ function fakeRelay() {
     jar,
     requests,
     revokedFamilies,
-    tokenRequests: () => requests.filter((request) => request.path === "/oauth/token"),
+    tokenRequests: () => requests.filter((request) => request.path?.endsWith("/oauth/token")),
+    /** Delays every refresh until the returned release is called. */
+    holdRefreshes: () => {
+      let release!: () => void;
+      refreshHold = new Promise((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        refreshHold = null;
+        release();
+      };
+    },
     addCode: (code: string, challenge: string, redirectUri: string) =>
       codes.set(code, { challenge, redirectUri }),
     /** A live refresh family for a client that keeps its token in a store. */
+    revokeAll: () => {
+      for (const row of tokens.values()) revokedFamilies.add(row.family);
+    },
     seedRefresh: () => {
       tokens.set("refresh-seed", { family: 1, rotated: false });
       return "refresh-seed";
@@ -392,5 +408,200 @@ describe("createAccountSession", () => {
     await web.signOut();
     expect(relay.requests.at(-1)).toEqual({ path: "/oauth/revoke", client_id: "vekrel-web" });
     expect(relay.jar.refresh).toBeNull();
+  });
+
+  it("a refresh rejected after a new sign-in does not clear the new session", async () => {
+    const relay = fakeRelay();
+    const store = memoryStore("refresh-unknown");
+    const onSignedOut = vi.fn();
+    const session = createAccountSession({
+      relayUrl: RELAY,
+      clientId: AccountClientId.mobile,
+      store,
+      fetch: relay.fetch,
+      onSignedOut,
+    });
+    const release = relay.holdRefreshes();
+    const staleRefresh = session.getAccessToken();
+    await Promise.resolve();
+
+    const { pending } = beginSignIn({
+      relayUrl: RELAY,
+      clientId: AccountClientId.mobile,
+      redirectUri: APP_REDIRECT,
+    });
+    relay.addCode("code-1", await challengeOf(pending.verifier), APP_REDIRECT);
+    await session.completeSignIn(`${APP_REDIRECT}?code=code-1&state=${pending.state}`, pending);
+    const signedInRefresh = store.value;
+    release();
+    await staleRefresh;
+
+    expect(store.value).toBe(signedInRefresh);
+    expect(store.value).toMatch(/^refresh-\d+$/u);
+    expect(onSignedOut).not.toHaveBeenCalled();
+    expect(await session.getAccessToken()).toMatch(/^access-/u);
+  });
+
+  it("stays signed out without asking the relay again, and reports only a real sign-out", async () => {
+    const relay = fakeRelay();
+    const onSignedOut = vi.fn();
+    const session = createAccountSession({
+      relayUrl: RELAY,
+      clientId: AccountClientId.web,
+      fetch: relay.fetch,
+      onSignedOut,
+    });
+
+    expect(await session.getAccessToken()).toBeNull();
+    for (let i = 0; i < 5; i += 1) expect(await session.getAccessToken()).toBeNull();
+    expect(await Promise.all([session.refresh(), session.getAccessToken()])).toEqual([null, null]);
+    expect(relay.tokenRequests()).toHaveLength(1);
+    expect(onSignedOut).not.toHaveBeenCalled();
+
+    const { pending } = beginSignIn({
+      relayUrl: RELAY,
+      clientId: AccountClientId.web,
+      redirectUri: "https://app.example.test/auth/callback",
+    });
+    relay.addCode("code-1", await challengeOf(pending.verifier), pending.redirectUri);
+    await session.completeSignIn(
+      `${pending.redirectUri}?code=code-1&state=${pending.state}`,
+      pending,
+    );
+    relay.revokeAll();
+    expect(await session.refresh()).toBeNull();
+    expect(onSignedOut).toHaveBeenCalledTimes(1);
+    const requestsAfterSignOut = relay.tokenRequests().length;
+    for (let i = 0; i < 3; i += 1) expect(await session.getAccessToken()).toBeNull();
+    expect(relay.tokenRequests()).toHaveLength(requestsAfterSignOut);
+    expect(onSignedOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts a hung token request after 15 s and releases the refresh", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = memoryStore("refresh-1");
+      const hung = vi.fn(
+        (_input: string, init: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+          }),
+      );
+      const session = createAccountSession({
+        relayUrl: RELAY,
+        clientId: AccountClientId.mobile,
+        store,
+        fetch: hung,
+      });
+
+      const first = session.getAccessToken();
+      const failed = expect(first).rejects.toMatchObject({ reason: "token-request-failed" });
+      await vi.advanceTimersByTimeAsync(14_999);
+      expect(hung.mock.calls[0]?.[1].signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await failed;
+      expect(store.value).toBe("refresh-1");
+
+      const second = session.getAccessToken();
+      const failedAgain = expect(second).rejects.toMatchObject({ reason: "token-request-failed" });
+      await vi.advanceTimersByTimeAsync(15_000);
+      await failedAgain;
+      expect(hung).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("revokes before clearing the store, and still revokes when clearing throws", async () => {
+    const relay = fakeRelay();
+    const order: string[] = [];
+    const store = memoryStore(relay.seedRefresh());
+    const session = createAccountSession({
+      relayUrl: RELAY,
+      clientId: AccountClientId.desktop,
+      store: {
+        ...store,
+        read: store.read,
+        clear: async () => {
+          order.push("clear");
+          throw new Error("keychain locked");
+        },
+      },
+      fetch: async (input, init) => {
+        order.push("revoke");
+        return relay.fetch(input, init);
+      },
+    });
+
+    await expect(session.signOut()).rejects.toThrow("keychain locked");
+    expect(order).toEqual(["revoke", "clear"]);
+    expect(relay.revokedFamilies.size).toBe(1);
+    expect(await session.getAccessToken()).toBeNull();
+  });
+
+  it("keeps the session on 401, 429 and 5xx from the token endpoint", async () => {
+    for (const status of [401, 429, 503]) {
+      const store = memoryStore("refresh-1");
+      const onSignedOut = vi.fn();
+      const fetch = vi.fn(async () => new Response("{}", { status }));
+      const session = createAccountSession({
+        relayUrl: RELAY,
+        clientId: AccountClientId.mobile,
+        store,
+        fetch,
+        onSignedOut,
+      });
+
+      await expect(session.getAccessToken()).rejects.toMatchObject({
+        reason: "token-request-failed",
+        status,
+      });
+      await expect(session.getAccessToken()).rejects.toMatchObject({ status });
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(store.value).toBe("refresh-1");
+      expect(onSignedOut).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe("relay URL", () => {
+  it("accepts https and loopback http, keeps a path prefix, refuses the rest", async () => {
+    const relay = fakeRelay();
+    const session = createAccountSession({
+      relayUrl: "https://relay.example.test/relay/",
+      clientId: AccountClientId.desktop,
+      store: memoryStore(relay.seedRefresh()),
+      fetch: relay.fetch,
+    });
+    await session.getAccessToken();
+    expect(relay.fetch.mock.calls[0]?.[0]).toBe("https://relay.example.test/relay/oauth/token");
+    expect(
+      beginSignIn({
+        relayUrl: "https://relay.example.test/relay",
+        clientId: AccountClientId.desktop,
+        redirectUri: APP_REDIRECT,
+      }).url,
+    ).toMatch(/^https:\/\/relay\.example\.test\/relay\/oauth\/authorize\?/u);
+
+    for (const ok of ["http://localhost:8787", "http://127.0.0.1:8787", "http://[::1]:8787"]) {
+      expect(() =>
+        createAccountSession({ relayUrl: ok, clientId: AccountClientId.web }),
+      ).not.toThrow();
+    }
+    for (const bad of [
+      "http://relay.example.test",
+      "https://user:pw@relay.example.test",
+      "https://relay.example.test/?x=1",
+      "https://relay.example.test/#x",
+      "ftp://relay.example.test",
+      "not a url",
+    ]) {
+      expect(() => createAccountSession({ relayUrl: bad, clientId: AccountClientId.web })).toThrow(
+        AccountAuthError,
+      );
+      expect(() =>
+        beginSignIn({ relayUrl: bad, clientId: AccountClientId.web, redirectUri: APP_REDIRECT }),
+      ).toThrow(AccountAuthError);
+    }
   });
 });

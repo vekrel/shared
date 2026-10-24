@@ -45,7 +45,8 @@ export function buildRelayAuthorizeUrl(input: {
   readonly state: string;
   readonly challenge: string;
 }): string {
-  const url = new URL("/oauth/authorize", input.relayUrl);
+  // Joined, not resolved: a relay mounted under a path prefix keeps it.
+  const url = new URL(`${input.relayUrl.replace(/\/+$/u, "")}/oauth/authorize`);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", input.clientId);
   url.searchParams.set("redirect_uri", input.redirectUri);

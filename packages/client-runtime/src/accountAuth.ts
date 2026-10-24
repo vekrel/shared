@@ -1,4 +1,4 @@
-// @effect-diagnostics globalFetch:off globalDate:off - Promise API for app auth providers (React, Electron, Expo), outside an Effect runtime.
+// @effect-diagnostics globalFetch:off globalDate:off globalTimers:off - Promise API for app auth providers (React, Electron, Expo), outside an Effect runtime.
 /**
  * Vekrel account sign-in against the relay's OAuth endpoints (`src/accounts/oauth.rs` in
  * Vekrel-Relay): authorization code + PKCE S256, rotating refresh tokens, RFC 7009 revoke.
@@ -28,6 +28,9 @@ export type AccountClientId = (typeof AccountClientId)[keyof typeof AccountClien
 
 /** Refresh the access token this long before it expires. */
 const ACCESS_TOKEN_EXPIRY_SKEW_MS = 30_000;
+/** A hung request must not hold the refresh lock (and every other tab) forever. */
+const REQUEST_TIMEOUT_MS = 15_000;
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export class AccountAuthError extends Data.TaggedError("AccountAuthError")<{
   readonly reason:
@@ -36,7 +39,8 @@ export class AccountAuthError extends Data.TaggedError("AccountAuthError")<{
     | "missing-code"
     | "token-rejected"
     | "token-request-failed"
-    | "invalid-token-response";
+    | "invalid-token-response"
+    | "invalid-relay-url";
   readonly message: string;
   readonly status?: number;
   readonly cause?: unknown;
@@ -49,6 +53,27 @@ export interface PendingSignIn {
   readonly redirectUri: string;
 }
 
+/**
+ * The relay base URL without a trailing slash: https, or http on loopback for local dev; no
+ * credentials, query or fragment; a path prefix is kept. Not `normalizeSecureRelayUrl`: that one
+ * is https-origin only (Engine CloudLink relies on it) and would refuse a local relay.
+ */
+export function normalizeAccountRelayUrl(value: string): string {
+  let url: URL | null = null;
+  try {
+    url = new URL(value.trim());
+  } catch {}
+  const secure =
+    url?.protocol === "https:" || (url?.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname));
+  if (!url || !secure || url.username || url.password || url.search || url.hash) {
+    throw new AccountAuthError({
+      reason: "invalid-relay-url",
+      message: "The relay URL must be https (or http on localhost) without credentials or query.",
+    });
+  }
+  return `${url.origin}${url.pathname.replace(/\/+$/u, "")}`;
+}
+
 export function beginSignIn(input: {
   readonly relayUrl: string;
   readonly clientId: AccountClientId;
@@ -57,7 +82,12 @@ export function beginSignIn(input: {
   const { verifier, challenge } = createPkcePair();
   const state = createOAuthState();
   return {
-    url: buildRelayAuthorizeUrl({ ...input, state, challenge }),
+    url: buildRelayAuthorizeUrl({
+      ...input,
+      relayUrl: normalizeAccountRelayUrl(input.relayUrl),
+      state,
+      challenge,
+    }),
     pending: { state, verifier, redirectUri: input.redirectUri },
   };
 }
@@ -107,13 +137,16 @@ export interface AccountSessionOptions {
   /** Required for every client except `vekrel-web`, whose refresh token is a relay cookie. */
   readonly store?: RefreshTokenStore;
   readonly fetch?: Fetch;
-  /** Called when the relay refuses the refresh token (revoked, reused, disabled account). */
+  /**
+   * Called when a signed-in session ends because the relay refused its refresh token (revoked,
+   * reused, disabled account). Not called for an explicit `signOut`.
+   */
   readonly onSignedOut?: () => void;
 }
 
 export interface AccountSession {
   readonly completeSignIn: (callbackUrl: string | URL, pending: PendingSignIn) => Promise<void>;
-  /** A valid access token, refreshing if needed; `null` when signed out. */
+  /** A valid access token, refreshing if needed; `null` when signed out (no request then). */
   readonly getAccessToken: () => Promise<string | null>;
   readonly refresh: () => Promise<string | null>;
   readonly signOut: () => Promise<void>;
@@ -150,41 +183,59 @@ export function createAccountSession(options: AccountSessionOptions): AccountSes
   if (!web && !store) {
     throw new Error(`${options.clientId} needs a refresh token store.`);
   }
+  const relayUrl = normalizeAccountRelayUrl(options.relayUrl);
   const fetchImpl: Fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   const withLock = crossContextLock(`vekrel-account-refresh:${options.clientId}`);
   let access: { readonly token: string; readonly expiresAtMillis: number } | null = null;
   let inFlight: Promise<string | null> | null = null;
-  // Bumped by sign-out so a refresh that finishes afterwards cannot revive the session.
+  // "unknown" until the relay answers once; "out" stops all token requests until a sign-in.
+  let status: "unknown" | "in" | "out" = "unknown";
+  // Bumped by sign-in and sign-out, so a request started before either cannot change the
+  // session afterwards (a late rejection cannot clear a new sign-in).
   let generation = 0;
 
-  const post = async (path: string, fields: Record<string, string>): Promise<Response> => {
+  /** POST a form; the timeout also covers reading the body. */
+  const post = async (
+    path: string,
+    fields: Record<string, string>,
+  ): Promise<{ readonly response: Response; readonly body: unknown }> => {
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(new Error("The relay did not answer in time.")),
+      REQUEST_TIMEOUT_MS,
+    );
     try {
-      return await fetchImpl(new URL(path, options.relayUrl).toString(), {
+      const response = await fetchImpl(`${relayUrl}${path}`, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams(fields).toString(),
+        signal: controller.signal,
         ...(web ? { credentials: "include" } : {}),
       });
+      const body: unknown = await response.json().catch(() => null);
+      return { response, body };
     } catch (cause) {
       throw new AccountAuthError({
         reason: "token-request-failed",
         message: "Could not reach the Vekrel relay.",
         cause,
       });
+    } finally {
+      clearTimeout(timer);
     }
   };
 
   const requestTokens = async (fields: Record<string, string>): Promise<TokenBody> => {
-    const response = await post("/oauth/token", { ...fields, client_id: options.clientId });
-    const body: unknown = await response.json().catch(() => null);
+    const { response, body } = await post("/oauth/token", {
+      ...fields,
+      client_id: options.clientId,
+    });
     if (!response.ok) {
       const oauthError = (body as { readonly error?: unknown } | null)?.error;
       throw new AccountAuthError({
-        // 400/401 are OAuth refusals (invalid_grant, invalid_client); 429 and 5xx are transient.
-        reason:
-          response.status === 400 || response.status === 401
-            ? "token-rejected"
-            : "token-request-failed",
+        // The relay answers every OAuth refusal (invalid_grant, invalid_request, invalid_client)
+        // with 400. A 401 can come from a proxy; it, 429 and 5xx keep the session.
+        reason: response.status === 400 ? "token-rejected" : "token-request-failed",
         message: `The relay refused the token request (${typeof oauthError === "string" ? oauthError : response.status}).`,
         status: response.status,
       });
@@ -200,27 +251,29 @@ export function createAccountSession(options: AccountSessionOptions): AccountSes
 
   const accept = async (body: TokenBody, issuedAtGeneration: number): Promise<string | null> => {
     if (issuedAtGeneration !== generation) {
-      return null;
+      // Superseded by a sign-in or sign-out: report whatever the session holds now.
+      return access?.token ?? null;
     }
     if (store && body.refresh_token !== undefined) {
       await store.write(body.refresh_token);
     }
+    status = "in";
     access = { token: body.access_token, expiresAtMillis: Date.now() + body.expires_in * 1_000 };
     return body.access_token;
   };
 
-  const clearLocal = async () => {
-    generation += 1;
-    access = null;
-    await store?.clear();
-  };
-
   const refreshOnce = async (): Promise<string | null> => {
+    if (status === "out") {
+      return null;
+    }
     const startedAt = generation;
     const refreshToken = store ? await store.read() : null;
     if (store && !refreshToken) {
-      return null;
+      if (startedAt === generation) status = "out";
+      return access?.token ?? null;
     }
+    // If the response to a committed rotation is lost (timeout, network), the token we hold is
+    // already rotated; the relay has no grace window, so the next refresh is reuse and signs out.
     try {
       const body = await requestTokens({
         grant_type: "refresh_token",
@@ -228,14 +281,20 @@ export function createAccountSession(options: AccountSessionOptions): AccountSes
       });
       return await accept(body, startedAt);
     } catch (error) {
-      if (error instanceof AccountAuthError && error.reason === "token-rejected") {
-        if (startedAt === generation) {
-          await clearLocal();
-          options.onSignedOut?.();
-        }
-        return null;
+      if (!(error instanceof AccountAuthError && error.reason === "token-rejected")) {
+        throw error;
       }
-      throw error;
+      if (startedAt !== generation) {
+        return access?.token ?? null;
+      }
+      // A stored token counts as signed in: it is the previous launch's session.
+      const wasSignedIn = status === "in" || refreshToken !== null;
+      generation += 1;
+      status = "out";
+      access = null;
+      await store?.clear();
+      if (wasSignedIn) options.onSignedOut?.();
+      return null;
     }
   };
 
@@ -249,6 +308,7 @@ export function createAccountSession(options: AccountSessionOptions): AccountSes
   return {
     completeSignIn: async (callbackUrl, pending) => {
       const code = readSignInCallback(callbackUrl, pending);
+      generation += 1;
       const startedAt = generation;
       const body = await requestTokens({
         grant_type: "authorization_code",
@@ -267,14 +327,18 @@ export function createAccountSession(options: AccountSessionOptions): AccountSes
     refresh,
     signOut: async () => {
       const refreshToken = store ? await store.read() : null;
-      await clearLocal();
+      generation += 1;
+      status = "out";
+      access = null;
       if (web || refreshToken) {
+        // Revoke first, so a store that fails to clear still leaves a dead family behind.
         // Best effort: the local session is gone either way; the family expires in 30 days.
         await post("/oauth/revoke", {
           ...(refreshToken ? { token: refreshToken } : {}),
           client_id: options.clientId,
         }).catch(() => undefined);
       }
+      await store?.clear();
     },
   };
 }
